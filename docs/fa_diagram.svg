@@ -1,0 +1,265 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1342.956 866" width="1342.956" height="866" style="--bg:#FFFFFF;--fg:#3B3B3B;--line:#3B3B3B;--accent:#005FB8;--muted:#3B3B3BCC;--surface:#F8F8F8;--border:#3B3B3B;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  .mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+</defs>
+<polyline class="er-relationship" data-entity1="users" data-entity2="user_identities" data-cardinality1="one" data-cardinality2="zero-many" data-identifying="true" data-label="1:N (провайдеры входа)" points="226.4,379.33333333333337 246.4,379.33333333333337 246.4,496 544.354,496" fill="none" stroke="var(--_line)" stroke-width="1" />
+<polyline class="er-relationship" data-entity1="users" data-entity2="user_sessions" data-cardinality1="one" data-cardinality2="zero-many" data-identifying="true" data-label="1:N (активные устройства)" points="226.4,415.33333333333337 236.4,415.33333333333337 236.4,732 544.354,732" fill="none" stroke="var(--_line)" stroke-width="1" />
+<polyline class="er-relationship" data-entity1="users" data-entity2="favorites" data-cardinality1="one" data-cardinality2="zero-many" data-identifying="true" data-label="1:N (избранное)" points="226.4,343.33333333333337 464.35400000000004,343.33333333333337 464.35400000000004,320.66666666666663 544.354,320.66666666666663" fill="none" stroke="var(--_line)" stroke-width="1" />
+<polyline class="er-relationship" data-entity1="stations" data-entity2="station_streams" data-cardinality1="one" data-cardinality2="zero-many" data-identifying="true" data-label="1:N (аудиопотоки)" points="226.4,112 554.254,112" fill="none" stroke="var(--_line)" stroke-width="1" />
+<polyline class="er-relationship" data-entity1="stations" data-entity2="favorites" data-cardinality1="one" data-cardinality2="zero-many" data-identifying="true" data-label="1:N" points="226.4,174.66666666666666 236.4,174.66666666666666 236.4,287.3333333333333 544.354,287.3333333333333" fill="none" stroke="var(--_line)" stroke-width="1" />
+<polyline class="er-relationship" data-entity1="station_streams" data-entity2="stream_health" data-cardinality1="one" data-cardinality2="one" data-identifying="true" data-label="1:1 (изоляция телеметрии)" points="767.054,112 1090.156,112" fill="none" stroke="var(--_line)" stroke-width="1" />
+<g class="entity" data-id="users" data-label="users">
+  <rect x="40" y="307.33333333333337" width="186.4" height="144" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="40" y="307.33333333333337" width="186.4" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="133.2" y="324.33333333333337" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">users</text>
+  <line x1="40" y1="341.33333333333337" x2="226.4" y2="341.33333333333337" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <g><title>SERIAL</title>
+  <rect x="46" y="345.33333333333337" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="57.155" y="352.33333333333337" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="76.31" y="352.33333333333337" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="218.4" y="352.33333333333337" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  </g>
+  <rect x="46" y="367.33333333333337" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="57.155" y="374.33333333333337" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">UK</text>
+  <text x="76.31" y="374.33333333333337" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">varchar_64</tspan></text>
+  <text x="218.4" y="374.33333333333337" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">username</tspan></text>
+  <rect x="46" y="389.33333333333337" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="57.155" y="396.33333333333337" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">UK</text>
+  <text x="76.31" y="396.33333333333337" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">varchar_255</tspan></text>
+  <text x="218.4" y="396.33333333333337" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">email</tspan></text>
+  <g><title>user | admin</title>
+  <text x="48" y="418.33333333333337" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">varchar_16</tspan></text>
+  <text x="218.4" y="418.33333333333337" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">role</tspan></text>
+  </g>
+  <text x="48" y="440.33333333333337" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">timestamptz</tspan></text>
+  <text x="218.4" y="440.33333333333337" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">created_at</tspan></text>
+</g>
+<g class="entity" data-id="user_identities" data-label="user_identities">
+  <rect x="544.354" y="424" width="193" height="144" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="544.354" y="424" width="193" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="640.854" y="441" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">user_identities</text>
+  <line x1="544.354" y1="458" x2="737.354" y2="458" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <g><title>SERIAL</title>
+  <rect x="550.354" y="462" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="561.509" y="469" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="580.664" y="469" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="729.354" y="469" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  </g>
+  <g><title>-&gt; users.id CASCADE</title>
+  <rect x="550.354" y="484" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="561.509" y="491" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="580.664" y="491" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="729.354" y="491" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">user_id</tspan></text>
+  </g>
+  <g><title>password | telegram</title>
+  <text x="552.354" y="513" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">varchar_32</tspan></text>
+  <text x="729.354" y="513" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">provider</tspan></text>
+  </g>
+  <g><title>UK (provider, uid)</title>
+  <text x="552.354" y="535" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">varchar_255</tspan></text>
+  <text x="729.354" y="535" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">provider_uid</tspan></text>
+  </g>
+  <g><title>Bcrypt + Pepper</title>
+  <text x="552.354" y="557" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">varchar_255</tspan></text>
+  <text x="729.354" y="557" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">secret_hash</tspan></text>
+  </g>
+</g>
+<g class="entity" data-id="user_sessions" data-label="user_sessions">
+  <rect x="544.354" y="638" width="232.6" height="188" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="544.354" y="638" width="232.6" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="660.654" y="655" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">user_sessions</text>
+  <line x1="544.354" y1="672" x2="776.9540000000001" y2="672" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <g><title>SERIAL</title>
+  <rect x="550.354" y="676" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="561.509" y="683" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="580.664" y="683" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="768.9540000000001" y="683" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  </g>
+  <g><title>-&gt; users.id CASCADE</title>
+  <rect x="550.354" y="698" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="561.509" y="705" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="580.664" y="705" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="768.9540000000001" y="705" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">user_id</tspan></text>
+  </g>
+  <g><title>SHA-256</title>
+  <rect x="550.354" y="720" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="561.509" y="727" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">UK</text>
+  <text x="580.664" y="727" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">char_64</tspan></text>
+  <text x="768.9540000000001" y="727" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">refresh_token_hash</tspan></text>
+  </g>
+  <g><title>Имя устройства</title>
+  <text x="552.354" y="749" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">varchar_64</tspan></text>
+  <text x="768.9540000000001" y="749" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">device_name</tspan></text>
+  </g>
+  <text x="552.354" y="771" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">varchar_45</tspan></text>
+  <text x="768.9540000000001" y="771" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">ip_address</tspan></text>
+  <text x="552.354" y="793" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">boolean</tspan></text>
+  <text x="768.9540000000001" y="793" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">is_revoked</tspan></text>
+  <text x="552.354" y="815" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">timestamptz</tspan></text>
+  <text x="768.9540000000001" y="815" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">expires_at</tspan></text>
+</g>
+<g class="entity" data-id="favorites" data-label="favorites">
+  <rect x="544.354" y="254" width="153.39999999999998" height="100" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="544.354" y="254" width="153.39999999999998" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="621.0540000000001" y="271" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">favorites</text>
+  <line x1="544.354" y1="288" x2="697.754" y2="288" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <g><title>SERIAL</title>
+  <rect x="550.354" y="292" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="561.509" y="299" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="580.664" y="299" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="689.754" y="299" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  </g>
+  <g><title>-&gt; users.id CASCADE</title>
+  <rect x="550.354" y="314" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="561.509" y="321" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="580.664" y="321" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="689.754" y="321" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">user_id</tspan></text>
+  </g>
+  <g><title>-&gt; stations.id CASCADE</title>
+  <rect x="550.354" y="336" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="561.509" y="343" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="580.664" y="343" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="689.754" y="343" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">station_id</tspan></text>
+  </g>
+</g>
+<g class="entity" data-id="stations" data-label="stations">
+  <rect x="59.80000000000001" y="49.333333333333336" width="166.6" height="188" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="59.80000000000001" y="49.333333333333336" width="166.6" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="143.10000000000002" y="66.33333333333334" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">stations</text>
+  <line x1="59.80000000000001" y1="83.33333333333334" x2="226.4" y2="83.33333333333334" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <g><title>SERIAL</title>
+  <rect x="65.80000000000001" y="87.33333333333334" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="76.95500000000001" y="94.33333333333334" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="96.11000000000001" y="94.33333333333334" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="218.4" y="94.33333333333334" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  </g>
+  <text x="67.80000000000001" y="116.33333333333334" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">varchar_255</tspan></text>
+  <text x="218.4" y="116.33333333333334" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">name</tspan></text>
+  <text x="67.80000000000001" y="138.33333333333334" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">varchar_100</tspan></text>
+  <text x="218.4" y="138.33333333333334" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">country</tspan></text>
+  <text x="67.80000000000001" y="160.33333333333334" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">float</tspan></text>
+  <text x="218.4" y="160.33333333333334" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">latitude</tspan></text>
+  <text x="67.80000000000001" y="182.33333333333334" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">float</tspan></text>
+  <text x="218.4" y="182.33333333333334" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">longitude</tspan></text>
+  <text x="67.80000000000001" y="204.33333333333334" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">varchar_100</tspan></text>
+  <text x="218.4" y="204.33333333333334" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">language</tspan></text>
+  <g><title>TEXT[] + GIN INDEX</title>
+  <text x="67.80000000000001" y="226.33333333333334" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">text_array</tspan></text>
+  <text x="218.4" y="226.33333333333334" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">tags</tspan></text>
+  </g>
+</g>
+<g class="entity" data-id="station_streams" data-label="station_streams">
+  <rect x="554.254" y="40" width="212.79999999999998" height="144" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="554.254" y="40" width="212.79999999999998" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="660.654" y="57" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">station_streams</text>
+  <line x1="554.254" y1="74" x2="767.054" y2="74" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <g><title>SERIAL</title>
+  <rect x="560.254" y="78" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="571.409" y="85" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">PK</text>
+  <text x="590.564" y="85" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="759.054" y="85" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">id</tspan></text>
+  </g>
+  <g><title>-&gt; stations.id CASCADE</title>
+  <rect x="560.254" y="100" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="571.409" y="107" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">FK</text>
+  <text x="590.564" y="107" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="759.054" y="107" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">station_id</tspan></text>
+  </g>
+  <rect x="560.254" y="122" width="22.31" height="14" rx="2" ry="2" fill="var(--_key-badge)" />
+  <text x="571.409" y="129" text-anchor="middle" dy="0.35em" font-size="9" font-weight="600" fill="var(--_text-sec)">UK</text>
+  <text x="590.564" y="129" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">varchar_1024</tspan></text>
+  <text x="759.054" y="129" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">stream_url</tspan></text>
+  <g><title>MP3 | AAC</title>
+  <text x="562.254" y="151" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">varchar_32</tspan></text>
+  <text x="759.054" y="151" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">codec</tspan></text>
+  </g>
+  <g><title>128</title>
+  <text x="562.254" y="173" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="759.054" y="173" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">bitrate</tspan></text>
+  </g>
+</g>
+<g class="entity" data-id="stream_health" data-label="stream_health">
+  <rect x="1090.156" y="40" width="212.79999999999998" height="144" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="1090.156" y="40" width="212.79999999999998" height="34" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="1196.556" y="57" text-anchor="middle" font-size="13" font-weight="700" fill="var(--_text)" dy="4.55">stream_health</text>
+  <line x1="1090.156" y1="74" x2="1302.956" y2="74" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <g><title>-&gt; station_streams.id CASCADE</title>
+  <text x="1098.156" y="85" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="1294.956" y="85" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">stream_id</tspan></text>
+  </g>
+  <text x="1098.156" y="107" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">boolean</tspan></text>
+  <text x="1294.956" y="107" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">is_active</tspan></text>
+  <text x="1098.156" y="129" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="1294.956" y="129" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">response_time_ms</tspan></text>
+  <text x="1098.156" y="151" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">int</tspan></text>
+  <text x="1294.956" y="151" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">check_fail_count</tspan></text>
+  <text x="1098.156" y="173" class="mono" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-muted)">timestamptz</tspan></text>
+  <text x="1294.956" y="173" class="mono" text-anchor="end" dy="0.35em" font-size="11" font-weight="400"><tspan fill="var(--_text-sec)">last_checked_at</tspan></text>
+</g>
+<line x1="230.4" y1="373.33333333333337" x2="230.4" y2="385.33333333333337" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="234.4" y1="373.33333333333337" x2="234.4" y2="385.33333333333337" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="540.354" y1="503" x2="528.354" y2="496" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="540.354" y1="496" x2="528.354" y2="496" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="540.354" y1="489" x2="528.354" y2="496" stroke="var(--_line)" stroke-width="1.25" />
+<circle cx="524.354" cy="496" r="4" fill="var(--bg)" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="230.4" y1="409.33333333333337" x2="230.4" y2="421.33333333333337" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="234.4" y1="409.33333333333337" x2="234.4" y2="421.33333333333337" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="540.354" y1="739" x2="528.354" y2="732" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="540.354" y1="732" x2="528.354" y2="732" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="540.354" y1="725" x2="528.354" y2="732" stroke="var(--_line)" stroke-width="1.25" />
+<circle cx="524.354" cy="732" r="4" fill="var(--bg)" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="230.4" y1="337.33333333333337" x2="230.4" y2="349.33333333333337" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="234.4" y1="337.33333333333337" x2="234.4" y2="349.33333333333337" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="540.354" y1="327.66666666666663" x2="528.354" y2="320.66666666666663" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="540.354" y1="320.66666666666663" x2="528.354" y2="320.66666666666663" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="540.354" y1="313.66666666666663" x2="528.354" y2="320.66666666666663" stroke="var(--_line)" stroke-width="1.25" />
+<circle cx="524.354" cy="320.66666666666663" r="4" fill="var(--bg)" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="230.4" y1="106" x2="230.4" y2="118" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="234.4" y1="106" x2="234.4" y2="118" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="550.254" y1="119" x2="538.254" y2="112" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="550.254" y1="112" x2="538.254" y2="112" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="550.254" y1="105" x2="538.254" y2="112" stroke="var(--_line)" stroke-width="1.25" />
+<circle cx="534.254" cy="112" r="4" fill="var(--bg)" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="230.4" y1="168.66666666666666" x2="230.4" y2="180.66666666666666" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="234.4" y1="168.66666666666666" x2="234.4" y2="180.66666666666666" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="540.354" y1="294.3333333333333" x2="528.354" y2="287.3333333333333" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="540.354" y1="287.3333333333333" x2="528.354" y2="287.3333333333333" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="540.354" y1="280.3333333333333" x2="528.354" y2="287.3333333333333" stroke="var(--_line)" stroke-width="1.25" />
+<circle cx="524.354" cy="287.3333333333333" r="4" fill="var(--bg)" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="771.054" y1="106" x2="771.054" y2="118" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="775.054" y1="106" x2="775.054" y2="118" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1086.156" y1="118" x2="1086.156" y2="106" stroke="var(--_line)" stroke-width="1.25" />
+<line x1="1082.156" y1="118" x2="1082.156" y2="106" stroke="var(--_line)" stroke-width="1.25" />
+<rect x="266.9766666666667" y="485.85" width="120.13400000000003" height="20.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="327.0436666666667" y="496" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">1:N (провайдеры входа)</text>
+<rect x="167.423" y="712.4936666666667" width="137.95400000000004" height="20.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="236.4" y="722.6436666666667" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">1:N (активные устройства)</text>
+<rect x="355.35433333333344" y="333.1833333333334" width="82.71200000000002" height="20.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="396.71033333333344" y="343.33333333333337" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">1:N (избранное)</text>
+<rect x="343.031" y="101.85" width="94.59200000000001" height="20.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="390.327" y="112" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">1:N (аудиопотоки)</text>
+<rect x="318.2786666666667" y="277.18333333333334" width="21.53" height="20.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="329.0436666666667" y="287.3333333333333" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">1:N</text>
+<rect x="862.004" y="101.85" width="133.20200000000003" height="20.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="928.605" y="112" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">1:1 (изоляция телеметрии)</text>
+</svg>
