@@ -10,6 +10,7 @@ from app.schemas.station import (
     StationCreate,
     StationQuery,
     StationRead,
+    StationStreamCreate,
     StationUpdate,
 )
 from app.schemas.user import PasswordChange, UserRead
@@ -26,6 +27,7 @@ __all__ = [
     "StationCreate",
     "StationUpdate",
     "StationQuery",
+    "StationStreamCreate",
     "FavoriteRead",
     "FavoriteCreate",
 ]

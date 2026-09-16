@@ -4,8 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class StationBase(BaseModel):
-    name: str = Field(..., max_length=512)
-    stream_url: str = Field(..., max_length=1024)
+    name: str = Field(..., max_length=255)
     homepage_url: str | None = None
     favicon_url: str | None = None
     country: str = Field(..., max_length=100)
@@ -13,19 +12,22 @@ class StationBase(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     language: str | None = Field(None, max_length=100)
-    tags: str = Field("", description="Comma-separated tags, e.g. jazz,chillout")
-    vibes: str = Field("", description="Comma-separated vibes, e.g. focus,sunset")
+    tags: list[str] = []
+
+
+class StationStreamCreate(BaseModel):
+    stream_url: str = Field(..., max_length=1024)
     codec: str = "MP3"
     bitrate: int = 128
+    is_primary: bool = True
 
 
 class StationCreate(StationBase):
-    pass
+    streams: list[StationStreamCreate] = []
 
 
 class StationUpdate(BaseModel):
     name: str | None = None
-    stream_url: str | None = None
     homepage_url: str | None = None
     favicon_url: str | None = None
     country: str | None = None
@@ -33,10 +35,7 @@ class StationUpdate(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     language: str | None = None
-    tags: str | None = None
-    codec: str | None = None
-    bitrate: int | None = None
-    is_active: bool | None = None
+    tags: list[str] | None = None
 
 
 class StationStreamRead(BaseModel):
@@ -54,11 +53,8 @@ class StationStreamRead(BaseModel):
 class StationRead(StationBase):
     id: int
     station_uuid: str | None = None
-    is_active: bool = True
-    last_checked_at: datetime | None = None
     created_at: datetime
-    tag_list: list[str] = []
-    vibe_list: list[str] = []
+    updated_at: datetime
     streams: list[StationStreamRead] = []
 
     model_config = ConfigDict(from_attributes=True)
