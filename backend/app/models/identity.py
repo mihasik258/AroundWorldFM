@@ -24,7 +24,7 @@ class UserIdentity(Base):
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)  # e.g. "password", "telegram"
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)  # e.g. "password", "telegram"
     provider_uid: Mapped[str] = mapped_column(String(255), nullable=False)  # username/email or telegram_id
     secret_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)  # bcrypt hashed password
 
