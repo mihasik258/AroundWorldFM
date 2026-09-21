@@ -5,12 +5,12 @@ from app.models.station import Station, StationStream, StreamHealth
 from app.models.user import User, UserRole
 
 __all__ = [
-    "User",
-    "UserRole",
-    "UserIdentity",
-    "UserSession",
+    "Favorite",
     "Station",
     "StationStream",
     "StreamHealth",
-    "Favorite",
+    "User",
+    "UserIdentity",
+    "UserRole",
+    "UserSession",
 ]

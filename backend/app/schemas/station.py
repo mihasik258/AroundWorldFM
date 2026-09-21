@@ -14,7 +14,6 @@ class StationBase(BaseModel):
     longitude: float | None = None
     language: str | None = Field(None, max_length=100)
     tags: str = Field("", description="Comma-separated tags, e.g. jazz,chillout")
-    vibes: str = Field("", description="Comma-separated vibes, e.g. focus,sunset")
     codec: str = "MP3"
     bitrate: int = 128
 
@@ -58,7 +57,6 @@ class StationRead(StationBase):
     last_checked_at: datetime | None = None
     created_at: datetime
     tag_list: list[str] = []
-    vibe_list: list[str] = []
     streams: list[StationStreamRead] = []
 
     model_config = ConfigDict(from_attributes=True)

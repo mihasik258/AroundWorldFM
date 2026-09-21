@@ -1,0 +1,42 @@
+[project]
+name = "aroundfm-backend"
+version = "0.1.0"
+description = "AroundFM modern radio API with security compliance and stream health checks"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.4.0",
+    "email-validator>=2.2.0",
+    "sqlalchemy>=2.0.32",
+    "asyncpg>=0.29.0",
+    "bcrypt>=4.2.0",
+    "pyjwt[crypto]>=2.9.0",
+    "slowapi>=0.1.9",
+    "httpx>=0.27.0",
+    "python-multipart>=0.0.9",
+    "aiogram>=3.13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.6.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501", "E712", "UP042", "UP017"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]

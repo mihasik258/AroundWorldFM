@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -15,7 +14,6 @@ from app.core.rate_limit import limiter
 from app.db.base import Base
 from app.db.session import AsyncSessionLocal, engine
 from app.services.seed_service import seed_initial_data
-from app.services.stream_checker import run_stream_health_check
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,41 +22,22 @@ logging.basicConfig(
 logger = logging.getLogger("aroundfm")
 
 
-async def periodic_stream_checker():
-    logger.info("Background stream checker task started.")
-    try:
-        while True:
-            await asyncio.sleep(settings.STREAM_CHECK_INTERVAL_SECONDS)
-            async with AsyncSessionLocal() as db:
-                try:
-                    await run_stream_health_check(db)
-                except Exception as e:
-                    logger.error(f"Error during scheduled stream check: {e}")
-    except asyncio.CancelledError:
-        logger.info("Background stream checker task cancelled.")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager for startup"""
+    """Application lifespan manager for database initialization and cleanup."""
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}...")
 
+    # Create tables in PostgreSQL
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Seed initial users and curated radio stations
     async with AsyncSessionLocal() as db:
         await seed_initial_data(db)
-
-    checker_task = asyncio.create_task(periodic_stream_checker())
 
     yield
 
     logger.info("Shutting down...")
-    checker_task.cancel()
-    try:
-        await checker_task
-    except asyncio.CancelledError:
-        pass
     await engine.dispose()
     logger.info("Database engine disposed. Shutdown complete.")
 
@@ -98,11 +77,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             friendly = f"{field}: {msg}" if field else msg
         errors.append(friendly)
 
-    formatted_msg = "; ".join(errors) if errors else "Ошибка в входных данных"
+    formatted_msg = "; ".join(errors) if errors else "Ошибка во входных данных"
     return JSONResponse(
         status_code=422,
         content={"detail": formatted_msg, "validation_errors": exc.errors()},
     )
+
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,0 +1,15 @@
+# Web framework & server
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+# Data validation & configuration
+pydantic>=2.8.0
+pydantic-settings>=2.4.0
+
+# Database & ORM (PostgreSQL)
+sqlalchemy>=2.0.32
+asyncpg>=0.29.0
+
+# Security & Password hashing
+bcrypt>=4.2.0
+pyjwt[crypto]>=2.9.0
