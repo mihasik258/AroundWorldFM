@@ -110,27 +110,3 @@ async def revoke_all_sessions(
     count = await AuthService.revoke_all_sessions(db, current_user.id)
     return {"status": "ok", "message": f"Отозвано сессий: {count}"}
 
-
-class TelegramAuthRequest(BaseModel):
-    init_data: str
-
-
-@router.post(
-    "/telegram",
-    response_model=TokenResponse,
-    summary="Бесшовный вход через Telegram Mini App (SSO)",
-)
-async def telegram_auth(
-    request: Request,
-    data: TelegramAuthRequest,
-    db: AsyncSession = Depends(get_db),
-    user_agent: str | None = Header(None),
-):
-    """Аутентифицирует пользователя внутри Telegram WebApp по криптографической подписи initData."""
-    ip_address = request.client.host if request.client else None
-    return await AuthService.authenticate_telegram(
-        db=db,
-        init_data=data.init_data,
-        ip_address=ip_address,
-        user_agent=user_agent,
-    )

@@ -41,9 +41,6 @@ class Settings(BaseSettings):
     RATE_LIMIT_LOGIN: str = "10/minute"
     RATE_LIMIT_REGISTER: str = "5/minute"
 
-    # Telegram Mini App
-    TELEGRAM_BOT_TOKEN: str | None = None
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

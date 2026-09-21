@@ -1,0 +1,778 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========================================================================
+   Around FM — "Приёмник"
+   The planet is the tuning dial. The screen centre is the needle.
+   Only the globe carries colour; the panel around it is bone on void.
+   ===================================================================== */
+
+:root {
+  --void: #070a10;
+  --deep: #0c1018;
+  --raise: #121824;
+
+  --line: rgba(232, 227, 216, 0.10);
+  --line-strong: rgba(232, 227, 216, 0.22);
+
+  --bone: #e8e3d8;
+  --ash: #8b8a85;
+  --dim: #5d6068;
+
+  --lamp: #ffb347;
+  --lamp-soft: rgba(255, 179, 71, 0.13);
+  --twilight: #5b8bb0;
+  --alert: #d2645a;
+
+  --f-ui: 'Onest', system-ui, -apple-system, sans-serif;
+  --f-num: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  --step: 4px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: #04070d;
+  color: var(--bone);
+  font-family: var(--f-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+::selection {
+  background: var(--lamp);
+  color: var(--void);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+input,
+select {
+  font-family: var(--f-ui);
+}
+
+:focus-visible {
+  outline: 1px solid var(--lamp);
+  outline-offset: 3px;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* --- numerals -------------------------------------------------------- */
+/* Mono is reserved for instrument readouts: clocks, coordinates, countdowns.
+   Never for labels. */
+.num {
+  font-family: var(--f-num);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ========================================================================
+   Shell
+   ===================================================================== */
+
+.shell {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100dvh;
+  width: 100%;
+
+  /* Not flat black: a cold halo sits behind the planet and a thin warm wash
+     rises off the console, so the two colours of the app (signal amber, night
+     cyan) are present even before the globe loads. */
+  background:
+    radial-gradient(115% 62% at 50% 40%, rgba(46, 120, 152, 0.20), transparent 62%),
+    radial-gradient(90% 45% at 50% 104%, rgba(255, 179, 71, 0.07), transparent 70%),
+    linear-gradient(180deg, #070c16 0%, #04070d 62%, #03050a 100%);
+}
+
+/* --- top rail --------------------------------------------------------- */
+
+.rail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  z-index: 20;
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--bone);
+  user-select: none;
+}
+
+.rail-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rail-clock {
+  font-size: 12px;
+  color: var(--dim);
+  padding-right: 6px;
+}
+
+/* Quiet text button used across the rail */
+.ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  font-size: 13px;
+  color: var(--ash);
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.ghost:hover {
+  color: var(--bone);
+  background: rgba(232, 227, 216, 0.05);
+}
+
+.ghost-count {
+  font-family: var(--f-num);
+  font-size: 11px;
+  color: var(--lamp);
+}
+
+/* ========================================================================
+   Stage — the planet, edge to edge
+   ===================================================================== */
+
+.stage {
+  position: relative;
+  overflow: hidden;
+  /* Both axes must be allowed to shrink: a grid item defaults to min-*:auto,
+     and the WebGL canvas carries inline pixel sizes that would otherwise
+     inflate the whole shell when the window gets smaller. */
+  min-width: 0;
+  min-height: 0;
+}
+
+.stage-canvas {
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+/* three.js writes width/height inline on the canvas; the box must still follow
+   the container, and the drawing buffer is resized separately on resize. */
+.stage-canvas > canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.stage-canvas:active {
+  cursor: grabbing;
+}
+
+/* --- the needle ------------------------------------------------------- */
+/* A fixed reticle at dead centre. Spinning moves the Earth under it, which
+   is what makes the globe legible as a tuning dial without a tooltip. */
+
+.needle {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.needle svg {
+  overflow: visible;
+  opacity: 0.45;
+  transition: opacity 0.3s ease;
+}
+
+.needle.is-tuning svg {
+  opacity: 1;
+}
+
+.needle-line {
+  stroke: var(--bone);
+  stroke-width: 1;
+  opacity: 0.35;
+}
+
+.needle-bracket {
+  stroke: var(--bone);
+  stroke-width: 1;
+  fill: none;
+  transition: stroke 0.3s ease;
+}
+
+.needle.is-tuning .needle-bracket {
+  stroke: var(--lamp);
+}
+
+/* --- band selector ---------------------------------------------------- */
+/* A vibe is a band on a receiver, so it reads as a dial scale: a tick, a
+   name, and a lamp on the one that is lit. */
+
+.bands {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  padding: 10px 14px;
+  z-index: 10;
+  background: linear-gradient(to top, rgba(4, 7, 13, 0.92) 55%, transparent);
+}
+
+.band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--dim);
+  border-radius: 4px;
+  transition: color 0.18s ease;
+}
+
+.band:hover {
+  color: var(--ash);
+}
+
+.band-tick {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  transition: background 0.25s ease, border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.band.is-on {
+  color: var(--bone);
+}
+
+.band.is-on .band-tick {
+  background: var(--lamp);
+  border-color: var(--lamp);
+  box-shadow: 0 0 9px rgba(255, 179, 71, 0.7);
+}
+
+@media (min-width: 900px) {
+  /* On a wide screen the rail stands vertically at the left edge of the
+     stage, the way a band switch sits beside a dial. */
+  .bands {
+    top: 50%;
+    right: auto;
+    bottom: auto;
+    transform: translateY(-50%);
+    flex-direction: column;
+    gap: 1px;
+    padding: 14px 14px 14px 18px;
+    overflow: visible;
+    background: none;
+  }
+
+  .band {
+    padding: 8px 10px;
+  }
+}
+
+/* ========================================================================
+   Console — station readout and transport
+   ===================================================================== */
+
+.console {
+  position: relative;
+  padding: 16px 18px 18px;
+  z-index: 10;
+}
+
+/* The rotation timer IS the divider between stage and console: the hairline
+   depletes over the five minutes rather than sitting there as decoration. */
+.rotation-track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--line);
+}
+
+.rotation-fill {
+  height: 100%;
+  background: var(--lamp);
+  opacity: 0.55;
+  transition: width 1s linear;
+}
+
+.console-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 3px;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--ash);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dim);
+  flex: none;
+}
+
+.status.is-live .status-dot {
+  background: var(--lamp);
+  box-shadow: 0 0 8px rgba(255, 179, 71, 0.8);
+  animation: breathe 3.4s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.next-in {
+  font-size: 12px;
+  color: var(--dim);
+  flex: none;
+}
+
+.next-in .num {
+  color: var(--ash);
+  margin-left: 6px;
+}
+
+.station-name {
+  font-size: 27px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--bone);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Meta reads as an instrument row: values separated by rules, not bullets. */
+.meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 7px;
+  font-size: 13px;
+  color: var(--ash);
+  min-height: 20px;
+}
+
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meta-rule {
+  width: 1px;
+  height: 11px;
+  background: var(--line-strong);
+  flex: none;
+}
+
+/* Narrow screens wrap the readout onto two lines, which strands a rule at the
+   end of a line. Space alone separates the values there. */
+@media (max-width: 639px) {
+  .meta {
+    gap: 14px;
+  }
+  .meta-rule {
+    display: none;
+  }
+}
+
+.meta .num {
+  color: var(--bone);
+}
+
+.track {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.track-title {
+  color: var(--bone);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--ash);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line-strong);
+  padding-bottom: 1px;
+  flex: none;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.track-link:hover {
+  color: var(--bone);
+  border-color: var(--bone);
+}
+
+/* --- transport -------------------------------------------------------- */
+
+.transport {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 16px;
+}
+
+.transport-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.key {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: var(--ash);
+  border-radius: 4px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.key:hover:not(:disabled) {
+  color: var(--bone);
+  background: rgba(232, 227, 216, 0.05);
+}
+
+.key:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.key.is-on {
+  color: var(--lamp);
+}
+
+/* The single ringed control: play. Everything else is a bare glyph. */
+.key-play {
+  width: 46px;
+  height: 46px;
+  color: var(--bone);
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  margin-right: 6px;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.key-play:hover:not(:disabled) {
+  border-color: var(--lamp);
+  color: var(--lamp);
+  background: none;
+}
+
+/* --- volume ----------------------------------------------------------- */
+
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 130px;
+  flex: none;
+}
+
+.vol {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 12px;
+  background: none;
+  cursor: pointer;
+}
+
+.vol::-webkit-slider-runnable-track {
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.vol::-moz-range-track {
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.vol::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 3px;
+  height: 12px;
+  margin-top: -5.5px;
+  background: var(--bone);
+  border-radius: 0;
+  border: none;
+}
+
+.vol::-moz-range-thumb {
+  width: 3px;
+  height: 12px;
+  background: var(--bone);
+  border: none;
+  border-radius: 0;
+}
+
+/* --- states ----------------------------------------------------------- */
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--alert);
+}
+
+.alert button {
+  color: var(--ash);
+  border-bottom: 1px solid var(--line-strong);
+  padding-bottom: 1px;
+}
+
+.alert button:hover {
+  color: var(--bone);
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.empty-text {
+  font-size: 15px;
+  color: var(--ash);
+  max-width: 46ch;
+}
+
+.start {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--void);
+  background: var(--lamp);
+  border-radius: 4px;
+  flex: none;
+  transition: filter 0.15s ease;
+}
+
+.start:hover {
+  filter: brightness(1.08);
+}
+
+@media (min-width: 900px) {
+  .console {
+    padding: 18px 28px 22px;
+  }
+  .rail {
+    padding: 15px 28px;
+  }
+  .station-name {
+    font-size: 32px;
+  }
+}
+
+/* ========================================================================
+   Shared chrome for the modal surfaces
+   ===================================================================== */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 6, 10, 0.82);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  padding: 16px;
+}
+
+.glass-panel {
+  background: var(--deep);
+  border: 1px solid var(--line);
+}
+
+.glass-card {
+  background: var(--raise);
+  border: 1px solid var(--line);
+  transition: border-color 0.15s ease;
+}
+
+.glass-card:hover {
+  border-color: var(--line-strong);
+}
+
+.btn-primary {
+  background: var(--lamp);
+  color: var(--void);
+  padding: 10px 18px;
+  border-radius: 4px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: filter 0.15s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: none;
+  color: var(--ash);
+  padding: 10px 16px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  color: var(--bone);
+  border-color: var(--line-strong);
+}
+
+.pulsing-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lamp);
+  box-shadow: 0 0 8px rgba(255, 179, 71, 0.8);
+  animation: breathe 3.4s ease-in-out infinite;
+}
+
+/* ========================================================================
+   Motion: one orchestrated arrival, nothing else uninvited
+   ===================================================================== */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.arrive {
+  animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.arrive-2 {
+  animation-delay: 0.1s;
+}
+
+.arrive-3 {
+  animation-delay: 0.2s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

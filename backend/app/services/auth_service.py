@@ -13,7 +13,6 @@ from app.core.security import (
     decode_token,
     hash_password,
     verify_password,
-    verify_telegram_init_data,
 )
 from app.models.identity import UserIdentity
 from app.models.session import UserSession
@@ -33,8 +32,6 @@ def detect_device_name(user_agent: str | None) -> str:
     if not user_agent:
         return "Unknown Device"
     ua = user_agent.lower()
-    if "telegram" in ua:
-        return "Telegram Mini App"
     if "iphone" in ua or "ipad" in ua:
         return "Apple iOS Device"
     if "android" in ua:
@@ -270,97 +267,3 @@ class AuthService:
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
-    @classmethod
-    async def authenticate_telegram(
-        cls,
-        db: AsyncSession,
-        init_data: str,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
-    ) -> TokenResponse:
-        """Authenticates user via Telegram WebApp initData with UserIdentity."""
-        bot_token = settings.TELEGRAM_BOT_TOKEN
-        tg_user = None
-        if bot_token:
-            tg_user = verify_telegram_init_data(init_data, bot_token)
-        else:
-            try:
-                import json
-                from urllib.parse import parse_qsl
-                p = dict(parse_qsl(init_data, keep_blank_values=True))
-                if "user" in p:
-                    tg_user = json.loads(p["user"])
-            except Exception:
-                pass
-
-        if not tg_user or "id" not in tg_user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Недействительные данные авторизации Telegram",
-            )
-
-        telegram_id = int(tg_user["id"])
-        username = tg_user.get("username") or f"tg_{telegram_id}"
-        email = f"tg_{telegram_id}@telegram.aroundfm.internal"
-
-        # Check if telegram identity exists
-        stmt = select(UserIdentity).where(
-            UserIdentity.provider == "telegram",
-            UserIdentity.provider_uid == str(telegram_id),
-        )
-        result = await db.execute(stmt)
-        identity = result.scalar_one_or_none()
-
-        if identity:
-            user = await db.get(User, identity.user_id)
-        else:
-            # Check if user with this username exists
-            u_stmt = select(User).where(User.username == username)
-            u_res = await db.execute(u_stmt)
-            user = u_res.scalar_one_or_none()
-
-            if not user:
-                user = User(
-                    username=username,
-                    email=email,
-                    role=UserRole.USER,
-                    is_active=True,
-                )
-                db.add(user)
-                await db.flush()
-
-            identity = UserIdentity(
-                user_id=user.id,
-                provider="telegram",
-                provider_uid=str(telegram_id),
-            )
-            db.add(identity)
-            await db.commit()
-            await db.refresh(user)
-
-        # Generate tokens and track session
-        access_token = create_access_token(subject=str(user.id), role=user.role.value)
-        refresh_token, _ = create_refresh_token(subject=str(user.id))
-        token_hash = hash_token(refresh_token)
-
-        expires_at = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-        session = UserSession(
-            user_id=user.id,
-            refresh_token_hash=token_hash,
-            device_name="Telegram Mini App",
-            ip_address=ip_address,
-            user_agent=user_agent or "Telegram-Mini-App",
-            expires_at=expires_at,
-        )
-        db.add(session)
-        await db.commit()
-
-        return TokenResponse(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            token_type="bearer",
-            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            user_id=user.id,
-            username=user.username,
-            role=user.role.value,
-        )

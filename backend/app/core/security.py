@@ -100,29 +100,3 @@ def decode_token(token: str) -> dict[str, Any]:
     """Decodes and validates a JWT token signature and expiration."""
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
 
-
-def verify_telegram_init_data(init_data: str, bot_token: str) -> dict | None:
-    """Validates Telegram WebApp initData string using HMAC-SHA256 according to Telegram documentation.
-
-    Returns parsed user dict if valid, or None if signature is invalid.
-    """
-    try:
-        import json
-        from urllib.parse import parse_qsl
-
-        parsed_data = dict(parse_qsl(init_data, keep_blank_values=True))
-        if "hash" not in parsed_data:
-            return None
-
-        received_hash = parsed_data.pop("hash")
-        data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed_data.items()))
-
-        secret_key = hmac.new(b"WebAppData", bot_token.encode("utf-8"), hashlib.sha256).digest()
-        calculated_hash = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
-
-        if hmac.compare_digest(calculated_hash, received_hash):
-            user_json = parsed_data.get("user")
-            return json.loads(user_json) if user_json else {}
-        return None
-    except Exception:
-        return None
