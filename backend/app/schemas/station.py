@@ -4,8 +4,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class StationBase(BaseModel):
-    name: str = Field(..., max_length=512)
-    stream_url: str = Field(..., max_length=1024)
+    name: str = Field(..., max_length=255)
+    stream_url: str | None = None
     homepage_url: str | None = None
     favicon_url: str | None = None
     country: str = Field(..., max_length=100)
@@ -13,13 +13,21 @@ class StationBase(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     language: str | None = Field(None, max_length=100)
-    tags: str = Field("", description="Comma-separated tags, e.g. jazz,chillout")
+    tags: list[str] | str = []
     codec: str = "MP3"
     bitrate: int = 128
+    is_primary: bool = True
+
+
+class StationStreamCreate(BaseModel):
+    stream_url: str = Field(..., max_length=1024)
+    codec: str = "MP3"
+    bitrate: int = 128
+    is_primary: bool = True
 
 
 class StationCreate(StationBase):
-    pass
+    streams: list[StationStreamCreate] = []
 
 
 class StationUpdate(BaseModel):
@@ -32,10 +40,7 @@ class StationUpdate(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     language: str | None = None
-    tags: str | None = None
-    codec: str | None = None
-    bitrate: int | None = None
-    is_active: bool | None = None
+    tags: list[str] | str | None = None
 
 
 class StationStreamRead(BaseModel):
@@ -56,6 +61,7 @@ class StationRead(StationBase):
     is_active: bool = True
     last_checked_at: datetime | None = None
     created_at: datetime
+    updated_at: datetime | None = None
     tag_list: list[str] = []
     streams: list[StationStreamRead] = []
 

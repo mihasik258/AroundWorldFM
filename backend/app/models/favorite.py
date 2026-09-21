@@ -21,7 +21,7 @@ class Favorite(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     station_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("stations.id", ondelete="CASCADE"), nullable=False, index=True
