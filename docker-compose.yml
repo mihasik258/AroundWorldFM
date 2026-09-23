@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: aroundfm_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aroundfm
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aroundfm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aroundfm_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://postgres:postgrespassword@db:5432/aroundfm"
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+      SECRET_PEPPER: ${SECRET_PEPPER:-dev-secret-pepper-change-in-production}
+      CORS_ORIGINS: '["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"]'
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: aroundfm_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres_data:
