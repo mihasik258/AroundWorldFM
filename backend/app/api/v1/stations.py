@@ -201,7 +201,7 @@ async def proxy_station_stream(station_id: int, db: AsyncSession = Depends(get_d
         )
 
     stream_url = station.primary_stream.stream_url
-    client = httpx.AsyncClient(timeout=15.0, follow_redirects=True, verify=False, trust_env=False)
+    client = httpx.AsyncClient(timeout=15.0, follow_redirects=True, trust_env=False)
 
     async def stream_generator():
         try:

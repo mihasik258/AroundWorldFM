@@ -32,9 +32,6 @@ class RadioService:
                 )
             )
 
-        tag_list = station.tags if isinstance(station.tags, list) else []
-        tag_str = ", ".join(tag_list)
-
         return StationRead(
             id=station.id,
             station_uuid=station.station_uuid,
@@ -47,15 +44,13 @@ class RadioService:
             latitude=station.latitude,
             longitude=station.longitude,
             language=station.language,
-            tags=tag_str,
-            vibes="",
+            tags=station.tags if isinstance(station.tags, list) else [],
             codec=primary.codec if primary else "MP3",
             bitrate=primary.bitrate if primary else 128,
             is_active=is_active,
             last_checked_at=last_checked,
             created_at=station.created_at,
-            tag_list=tag_list,
-            vibe_list=[],
+            updated_at=station.updated_at,
             streams=streams_read,
         )
 

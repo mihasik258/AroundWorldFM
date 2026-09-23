@@ -41,8 +41,9 @@ async def change_password(
         )
 
     identity.secret_hash = hash_password(password_data.new_password)
-    # Revoke other sessions after password change for security
+    # Revoke ALL sessions (including the current one) after password change —
+    # forces a fresh login everywhere, standard practice after a credential change.
     await AuthService.revoke_all_sessions(db, current_user.id)
     await db.commit()
 
-    return {"status": "ok", "message": "Пароль успешно изменен. Все активные сессии завершены."}
+    return {"status": "ok", "message": "Пароль успешно изменен. Все активные сессии завершены, требуется повторный вход."}

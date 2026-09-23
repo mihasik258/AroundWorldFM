@@ -13,6 +13,12 @@ UTC = timezone.utc
 logger = logging.getLogger(__name__)
 
 
+# Only network-level failures mean "this stream is down". Anything else (a bug in
+# our own code, a missing setting) must propagate instead of silently marking every
+# stream as dead — that once wiped the whole catalogue in two check runs.
+STREAM_ERRORS = (httpx.HTTPError, asyncio.TimeoutError, OSError, ValueError)
+
+
 async def check_single_stream(client: httpx.AsyncClient, stream_url: str) -> bool:
     """Tests if an audio stream URL is alive and responding with audio data."""
     try:
@@ -23,7 +29,7 @@ async def check_single_stream(client: httpx.AsyncClient, stream_url: str) -> boo
             )
             if resp.status_code in (200, 206):
                 return True
-        except Exception:
+        except STREAM_ERRORS:
             pass
 
         # If HEAD fails or is disallowed by stream server, test with partial streaming GET
@@ -35,7 +41,7 @@ async def check_single_stream(client: httpx.AsyncClient, stream_url: str) -> boo
                 async for _ in resp.aiter_bytes(chunk_size=512):
                     return True
         return False
-    except Exception:
+    except STREAM_ERRORS:
         return False
 
 
@@ -89,10 +95,19 @@ async def run_stream_health_check(db: AsyncSession) -> None:
         "Icy-MetaData": "1",
     }
 
-    async with httpx.AsyncClient(headers=headers, verify=False, trust_env=False) as client:
+    async with httpx.AsyncClient(headers=headers, trust_env=False) as client:
         tasks = [check_and_update_stream(client, semaphore, s, db) for s in streams]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
     await db.commit()
+
+    errors = [r for r in results if isinstance(r, BaseException)]
+    if errors:
+        # Surface unexpected failures instead of letting them look like dead streams
+        logger.error(
+            f"Health check hit {len(errors)} unexpected errors, first one: "
+            f"{type(errors[0]).__name__}: {errors[0]}"
+        )
+
     alive_count = sum(1 for r in results if isinstance(r, tuple) and r[1])
     logger.info(f"Health check finished: {alive_count}/{len(streams)} streams active.")

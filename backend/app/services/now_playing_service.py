@@ -38,7 +38,7 @@ class NowPlayingService:
             "Icy-MetaData": "1",
         }
         try:
-            async with httpx.AsyncClient(timeout=3.5, verify=False, trust_env=False) as client:
+            async with httpx.AsyncClient(timeout=3.5, trust_env=False) as client:
                 async with client.stream("GET", stream_url, headers=headers) as resp:
                     metaint_hdr = resp.headers.get("icy-metaint")
                     if not metaint_hdr or not metaint_hdr.isdigit():

@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy.orm import selectinload
+
 from app.api.deps import get_db, require_role
 from app.models.session import UserSession
 from app.models.station import Station, StationStream, StreamHealth
@@ -11,6 +13,23 @@ from app.models.user import User, UserRole
 from app.schemas.station import StationCreate, StationRead, StationUpdate
 from app.services.radio_service import RadioService
 from app.services.stream_checker import run_stream_health_check
+
+
+async def _reload_station_with_streams(db: AsyncSession, station_id: int) -> Station:
+    """Re-fetches a station with streams+health eagerly loaded.
+
+    plain db.refresh() only reloads the station's own columns and the
+    top-level `streams` collection — it does not cascade into the nested
+    `streams[].health` relationship, so a later synchronous access to
+    `.health` in _station_to_read() can trigger a lazy load outside the
+    async greenlet and crash with MissingGreenlet.
+    """
+    stmt = (
+        select(Station)
+        .options(selectinload(Station.streams).selectinload(StationStream.health))
+        .where(Station.id == station_id)
+    )
+    return (await db.execute(stmt)).scalar_one()
 
 router = APIRouter(
     prefix="/admin",
@@ -65,8 +84,6 @@ async def create_station(
             detail="Станция с таким URL потока уже существует",
         )
 
-    tag_list = [t.strip().lower() for t in station_in.tags.split(",") if t.strip()] if station_in.tags else []
-
     station = Station(
         name=station_in.name,
         homepage_url=station_in.homepage_url,
@@ -76,7 +93,7 @@ async def create_station(
         latitude=station_in.latitude,
         longitude=station_in.longitude,
         language=station_in.language,
-        tags=tag_list,
+        tags=station_in.tags,
     )
     db.add(station)
     await db.flush()
@@ -94,7 +111,7 @@ async def create_station(
     health = StreamHealth(stream_id=stream.id, is_active=True)
     db.add(health)
     await db.commit()
-    await db.refresh(station)
+    station = await _reload_station_with_streams(db, station.id)
     return RadioService._station_to_read(station)
 
 
@@ -111,11 +128,29 @@ async def update_station(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Станция не найдена")
 
     update_data = station_in.model_dump(exclude_unset=True)
+    # stream_url belongs to station_streams, not stations — must be applied to the
+    # primary stream explicitly, plain setattr() on Station would silently no-op.
+    new_stream_url = update_data.pop("stream_url", None)
+
     for field, value in update_data.items():
         setattr(station, field, value)
 
+    if new_stream_url is not None:
+        primary = station.primary_stream
+        if primary and primary.stream_url != new_stream_url:
+            dup_stmt = select(StationStream).where(
+                StationStream.stream_url == new_stream_url,
+                StationStream.id != primary.id,
+            )
+            if (await db.execute(dup_stmt)).scalar_one_or_none():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Станция с таким URL потока уже существует",
+                )
+            primary.stream_url = new_stream_url
+
     await db.commit()
-    await db.refresh(station)
+    station = await _reload_station_with_streams(db, station_id)
     return RadioService._station_to_read(station)
 
 
