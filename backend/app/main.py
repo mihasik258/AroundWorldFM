@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 
 from app.api.v1 import api_router
 from app.core.config import settings
@@ -95,8 +96,22 @@ app.add_middleware(
 
 @app.get("/health", tags=["Система"], summary="Проверка состояния сервера")
 async def health_check():
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("SELECT 1"))
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "database": f"error: {e}",
+                "service": settings.PROJECT_NAME,
+                "version": settings.VERSION,
+            },
+        )
     return {
         "status": "healthy",
+        "database": "connected",
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
     }
