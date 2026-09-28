@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { UserSession } from '../types';
 import { X, Smartphone, Trash2, ShieldCheck, KeyRound, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 
@@ -9,6 +10,7 @@ interface SessionsModalProps {
 }
 
 export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose }) => {
+  const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState<'sessions' | 'password'>('sessions');
   const [sessions, setSessions] = useState<UserSession[]>([]);
   const [loading, setLoading] = useState(false);
@@ -40,6 +42,12 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
   }, [isOpen]);
 
   const handleRevoke = async (sessionId: number) => {
+    // Ending the session of this very device is just a logout
+    if (sessions.find((s) => s.id === sessionId)?.is_current) {
+      await logout();
+      onClose();
+      return;
+    }
     setActionLoading(true);
     try {
       await apiRequest(`/auth/sessions/${sessionId}`, { method: 'DELETE' });
@@ -56,8 +64,8 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
     if (!confirm('Вы уверены, что хотите завершить сеансы на всех устройствах?')) return;
     setActionLoading(true);
     try {
-      await apiRequest('/auth/sessions/revoke-all', { method: 'POST' });
-      setMessage({ text: 'Все сессии успешно отозваны', type: 'success' });
+      const res = await apiRequest('/auth/sessions/revoke-all', { method: 'POST' });
+      setMessage({ text: res.message || 'Сессии на других устройствах завершены', type: 'success' });
       loadSessions();
     } catch (err: any) {
       setMessage({ text: err.message || 'Ошибка отзыва всех сессий', type: 'error' });
@@ -76,9 +84,12 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
         method: 'POST',
         body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
       });
-      setMessage({ text: res.message || 'Пароль успешно изменен', type: 'success' });
+      // The server ends every session, this one included
+      alert(res.message || 'Пароль изменён. Войдите заново с новым паролем.');
       setOldPassword('');
       setNewPassword('');
+      await logout();
+      onClose();
     } catch (err: any) {
       setMessage({ text: err.message || 'Ошибка смены пароля', type: 'error' });
     } finally {
@@ -177,6 +188,11 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
                       <span className="text-xs font-semibold text-white truncate">
                         {s.user_agent ? s.user_agent.split(' ')[0] : 'Неизвестное устройство'}
                       </span>
+                      {s.is_current && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                          Это устройство
+                        </span>
+                      )}
                       {s.ip_address && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
                           {s.ip_address}
@@ -195,7 +211,7 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
                     onClick={() => handleRevoke(s.id)}
                     disabled={actionLoading}
                     className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                    title="Завершить сессию"
+                    title={s.is_current ? 'Выйти на этом устройстве' : 'Завершить сессию'}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

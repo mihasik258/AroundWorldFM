@@ -7,8 +7,10 @@ services:
       POSTGRES_DB: aroundfm
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgrespassword
+    # Loopback only: the password above is public in this repo, so the
+    # database must not be reachable from the network.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -28,11 +30,16 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: "postgresql+asyncpg://postgres:postgrespassword@db:5432/aroundfm"
-      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
-      SECRET_PEPPER: ${SECRET_PEPPER:-dev-secret-pepper-change-in-production}
+      # No fallback values on purpose: a default JWT key committed to a public
+      # repo lets anyone sign a token for user id 1 (the admin). Compose refuses
+      # to start until both are set — copy .env.example to .env.
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is not set, copy .env.example to .env}
+      SECRET_PEPPER: ${SECRET_PEPPER:?SECRET_PEPPER is not set, copy .env.example to .env}
       CORS_ORIGINS: '["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"]'
+    # Loopback only (for /docs and local debugging). Real traffic goes through
+    # nginx, which is the only place that sets X-Forwarded-For.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
 
   frontend:
     build:

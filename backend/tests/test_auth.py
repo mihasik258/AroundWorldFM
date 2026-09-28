@@ -41,10 +41,19 @@ async def test_login_success(client: AsyncClient, create_users):
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
-    assert "refresh_token" in data
+    # The refresh token must never be readable by page scripts: not in the body...
+    assert "refresh_token" not in data
     assert data["token_type"] == "bearer"
     assert data["username"] == "testuser"
     assert data["role"] == "user"
+
+    # ...only in an httpOnly, Secure, SameSite=Strict cookie scoped to /auth
+    set_cookie = response.headers["set-cookie"].lower()
+    assert set_cookie.startswith("refresh_token=")
+    assert "httponly" in set_cookie
+    assert "secure" in set_cookie
+    assert "samesite=strict" in set_cookie
+    assert "path=/api/v1/auth" in set_cookie
 
 
 @pytest.mark.asyncio

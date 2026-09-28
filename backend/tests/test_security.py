@@ -34,10 +34,11 @@ def test_secret_pepper_influence(monkeypatch):
 
 def test_jwt_access_and_refresh_tokens():
     """Verify JWT access and refresh token generation and decoding."""
-    access_tok = create_access_token(subject="42", role="admin")
+    access_tok = create_access_token(subject="42", role="admin", session_id=7)
     payload = decode_token(access_tok)
 
     assert payload["sub"] == "42"
+    assert payload["sid"] == 7
     assert payload["role"] == "admin"
     assert payload["type"] == "access"
 

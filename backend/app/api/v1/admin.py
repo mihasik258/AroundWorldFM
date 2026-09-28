@@ -3,7 +3,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_role
@@ -30,6 +29,7 @@ async def _reload_station_with_streams(db: AsyncSession, station_id: int) -> Sta
         .where(Station.id == station_id)
     )
     return (await db.execute(stmt)).scalar_one()
+
 
 router = APIRouter(
     prefix="/admin",

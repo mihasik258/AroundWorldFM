@@ -15,10 +15,33 @@ class Settings(BaseSettings):
     # Security: Secret Pepper for Password Hashing (stored in env, never in DB)
     SECRET_PEPPER: str
 
+    @field_validator("SECRET_KEY", "SECRET_PEPPER")
+    @classmethod
+    def secret_long_enough(cls, v: str) -> str:
+        # RFC 7518 §3.2: an HMAC-SHA256 key must be at least as long as the hash
+        # output. Applies to the pepper too — it is the HMAC key for passwords.
+        if len(v.encode("utf-8")) < 32:
+            raise ValueError("must be at least 32 bytes, generate with: openssl rand -hex 32")
+        return v
+
     # JWT lifetime
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     ALGORITHM: str = "HS256"
+
+    # Refresh token lives in an httpOnly cookie scoped to the auth endpoints only,
+    # so JavaScript (and therefore XSS) can never read it.
+    REFRESH_COOKIE_NAME: str = "refresh_token"
+    # Browsers accept Secure cookies on http://localhost; set to false only for
+    # plain-HTTP access through a non-localhost host during development.
+    COOKIE_SECURE: bool = True
+    # A rotated refresh token is still accepted for this long, to absorb
+    # legitimate races (two tabs refreshing at once). Reuse after that is
+    # treated as theft and revokes the whole session.
+    REFRESH_REUSE_GRACE_SECONDS: int = 30
+
+    # Periodic purge of expired and revoked sessions
+    SESSION_CLEANUP_INTERVAL_SECONDS: int = 3600
 
     # Database: PostgreSQL 16 (asyncpg)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgrespassword@localhost:5432/aroundfm"

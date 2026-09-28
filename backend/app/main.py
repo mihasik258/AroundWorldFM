@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -14,6 +15,7 @@ from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.db.base import Base
 from app.db.session import AsyncSessionLocal, engine
+from app.services.auth_service import AuthService
 from app.services.seed_service import seed_initial_data
 
 logging.basicConfig(
@@ -21,6 +23,19 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("aroundfm")
+
+
+async def periodic_session_cleanup():
+    """Purges expired and revoked sessions so user_sessions does not grow forever."""
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                removed = await AuthService.cleanup_sessions(db)
+            if removed:
+                logger.info(f"Session cleanup: removed {removed} expired/revoked sessions")
+        except Exception as e:
+            logger.error(f"Session cleanup failed: {type(e).__name__}: {e}")
+        await asyncio.sleep(settings.SESSION_CLEANUP_INTERVAL_SECONDS)
 
 
 @asynccontextmanager
@@ -36,9 +51,16 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as db:
         await seed_initial_data(db)
 
+    cleanup_task = asyncio.create_task(periodic_session_cleanup())
+
     yield
 
     logger.info("Shutting down...")
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
     await engine.dispose()
     logger.info("Database engine disposed. Shutdown complete.")
 

@@ -1,4 +1,6 @@
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -7,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import decode_token
 from app.db.session import get_db
+from app.models.session import UserSession
 from app.models.user import User, UserRole
 
 oauth2_scheme = OAuth2PasswordBearer(
@@ -15,47 +18,51 @@ oauth2_scheme = OAuth2PasswordBearer(
 )
 
 
-async def get_current_user(
-    db: AsyncSession = Depends(get_db),
-    token: str | None = Depends(oauth2_scheme),
-) -> User:
-    """Extracts, verifies JWT access token and returns the authenticated User."""
+@dataclass
+class AuthContext:
+    user: User
+    session: UserSession
+
+
+def _unauthorized(detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+async def _resolve_access_token(db: AsyncSession, token: str | None) -> AuthContext:
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Требуется аутентификация (токен отсутствует)",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _unauthorized("Требуется аутентификация (токен отсутствует)")
 
     try:
         payload = decode_token(token)
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Недействительный или истекший токен",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _unauthorized("Недействительный или истекший токен")
 
     if payload.get("type") != "access":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Неверный тип токена (ожидается access-токен)",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _unauthorized("Неверный тип токена (ожидается access-токен)")
 
     user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Отсутствует идентификатор пользователя в токене",
-        )
+    session_id = payload.get("sid")
+    if not user_id or not isinstance(session_id, int):
+        raise _unauthorized("Токен не содержит идентификатор пользователя или сессии")
+
+    # The session is checked on every request (one primary-key lookup), so a
+    # revoked session loses access immediately, not when the token expires.
+    session = await db.get(UserSession, session_id)
+    if (
+        not session
+        or session.user_id != int(user_id)
+        or session.is_revoked
+        or session.expires_at < datetime.now(timezone.utc)
+    ):
+        raise _unauthorized("Сессия была отозвана или истекла")
 
     user = await db.get(User, int(user_id))
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Пользователь не найден",
-        )
+        raise _unauthorized("Пользователь не найден")
 
     if not user.is_active:
         raise HTTPException(
@@ -63,26 +70,32 @@ async def get_current_user(
             detail="Учетная запись отключена",
         )
 
-    return user
+    return AuthContext(user=user, session=session)
+
+
+async def get_auth_context(
+    db: AsyncSession = Depends(get_db),
+    token: str | None = Depends(oauth2_scheme),
+) -> AuthContext:
+    """Verifies the access token and its session; FastAPI caches it per request."""
+    return await _resolve_access_token(db, token)
+
+
+async def get_current_user(ctx: AuthContext = Depends(get_auth_context)) -> User:
+    """Returns the authenticated User."""
+    return ctx.user
 
 
 async def get_optional_current_user(
     db: AsyncSession = Depends(get_db),
     token: str | None = Depends(oauth2_scheme),
 ) -> User | None:
-    """Extracts authenticated user if token present, else returns None."""
+    """Extracts authenticated user if a valid token is present, else returns None."""
     if not token:
         return None
     try:
-        payload = decode_token(token)
-        if payload.get("type") != "access":
-            return None
-        user_id = payload.get("sub")
-        if not user_id:
-            return None
-        user = await db.get(User, int(user_id))
-        return user if (user and user.is_active) else None
-    except Exception:
+        return (await _resolve_access_token(db, token)).user
+    except HTTPException:
         return None
 
 

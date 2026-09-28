@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { apiRequest } from '../api/client';
+import { apiRequest, refreshAccessToken, setAccessToken } from '../api/client';
 import { User } from '../types';
 
 interface AuthContextType {
@@ -18,47 +18,51 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('access_token'));
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  const clearAuth = () => {
+    setAccessToken(null);
+    setUser(null);
+    setToken(null);
+  };
 
   const fetchCurrentUser = async () => {
     try {
       const userData = await apiRequest<User>('/users/me');
       setUser(userData);
     } catch (err) {
-      setUser(null);
-      setToken(null);
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+      clearAuth();
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (token) {
-      fetchCurrentUser();
-    } else {
-      setIsLoading(false);
-    }
+    // The access token is kept in memory and is gone after a page reload.
+    // The refresh cookie survives, so restore the session silently.
+    (async () => {
+      const fresh = await refreshAccessToken();
+      if (fresh) {
+        setToken(fresh);
+        await fetchCurrentUser();
+      } else {
+        setIsLoading(false);
+      }
+    })();
 
-    const handleExpired = () => {
-      setUser(null);
-      setToken(null);
-    };
-
-    window.addEventListener('auth-expired', handleExpired);
-    return () => window.removeEventListener('auth-expired', handleExpired);
-  }, [token]);
+    window.addEventListener('auth-expired', clearAuth);
+    return () => window.removeEventListener('auth-expired', clearAuth);
+  }, []);
 
   const login = async (loginText: string, passwordText: string) => {
-    const data = await apiRequest<{ access_token: string; refresh_token: string; user_id: number; role: string }>('/auth/login', {
+    const data = await apiRequest<{ access_token: string; user_id: number; role: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ login: loginText, password: passwordText }),
     });
 
-    localStorage.setItem('access_token', data.access_token);
-    localStorage.setItem('refresh_token', data.refresh_token);
+    // The refresh token arrives as an httpOnly cookie and never reaches JS
+    setAccessToken(data.access_token);
     setToken(data.access_token);
     await fetchCurrentUser();
   };
@@ -73,10 +77,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    setUser(null);
-    setToken(null);
+    // Revoke the session on the server and delete the refresh cookie; without
+    // this the cookie would silently log the user back in on the next reload.
+    try {
+      await apiRequest('/auth/logout', { method: 'POST' });
+    } catch {
+      // Still clear local state even if the server is unreachable
+    }
+    clearAuth();
   };
 
   return (

@@ -50,9 +50,15 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def create_access_token(
     subject: str,
     role: str,
+    session_id: int,
     expires_delta: timedelta | None = None,
 ) -> str:
-    """Generates a short-lived JWT access token."""
+    """Generates a short-lived JWT access token bound to a user session.
+
+    The `sid` claim lets every request check that the session is still alive,
+    so revoking a session takes effect immediately instead of after the token
+    expires.
+    """
     now = datetime.now(UTC)
     if expires_delta:
         expire = now + expires_delta
@@ -61,6 +67,7 @@ def create_access_token(
 
     payload: dict[str, Any] = {
         "sub": str(subject),
+        "sid": session_id,
         "role": role,
         "type": "access",
         "iat": int(now.timestamp()),

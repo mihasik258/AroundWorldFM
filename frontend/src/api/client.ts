@@ -13,58 +13,75 @@ export class ApiError extends Error {
   }
 }
 
+// The access token lives only in memory: unlike localStorage, a variable does
+// not outlive the page and is not sitting in storage for a script to harvest.
+// The refresh token is an httpOnly cookie that JavaScript cannot read at all;
+// the browser attaches it to /auth/refresh by itself.
+let accessToken: string | null = null;
+
+export function setAccessToken(token: string | null) {
+  accessToken = token;
+}
+
+// Tokens from the old scheme stayed in localStorage; drop them on first load.
+localStorage.removeItem('access_token');
+localStorage.removeItem('refresh_token');
+
+// Every refresh rotates the refresh cookie, and presenting the same cookie
+// twice outside a short window counts as theft. Several requests failing with
+// 401 at once must therefore share one refresh instead of racing.
+let refreshInFlight: Promise<string | null> | null = null;
+
+export function refreshAccessToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          credentials: 'same-origin',
+        });
+        accessToken = res.ok ? (await res.json()).access_token : null;
+      } catch {
+        accessToken = null;
+      } finally {
+        refreshInFlight = null;
+      }
+      return accessToken;
+    })();
+  }
+  return refreshInFlight;
+}
+
+const NO_RETRY_ENDPOINTS = ['/auth/login', '/auth/refresh', '/auth/logout'];
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = localStorage.getItem('access_token');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
   const url = `${BASE_URL}${endpoint}`;
   let response = await fetch(url, {
     ...options,
     headers,
+    credentials: 'same-origin',
   });
 
-  // Handle Token Refresh on 401
-  if (response.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
-    const refreshToken = localStorage.getItem('refresh_token');
-    if (refreshToken) {
-      try {
-        const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: refreshToken }),
-        });
-
-        if (refreshRes.ok) {
-          const data = await refreshRes.json();
-          localStorage.setItem('access_token', data.access_token);
-          if (data.refresh_token) {
-            localStorage.setItem('refresh_token', data.refresh_token);
-          }
-
-          // Retry original request with fresh token
-          headers['Authorization'] = `Bearer ${data.access_token}`;
-          response = await fetch(url, { ...options, headers });
-        } else {
-          // Token refresh failed -> clear auth
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          window.dispatchEvent(new Event('auth-expired'));
-        }
-      } catch (e) {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        window.dispatchEvent(new Event('auth-expired'));
-      }
+  // Access token expired or its session was revoked: try one silent refresh
+  if (response.status === 401 && !NO_RETRY_ENDPOINTS.some((e) => endpoint.startsWith(e))) {
+    const fresh = await refreshAccessToken();
+    if (fresh) {
+      headers['Authorization'] = `Bearer ${fresh}`;
+      response = await fetch(url, { ...options, headers, credentials: 'same-origin' });
+    } else {
+      window.dispatchEvent(new Event('auth-expired'));
     }
   }
 

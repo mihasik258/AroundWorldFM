@@ -1,4 +1,10 @@
 import os
+
+# Test-only secrets. They must be in the environment before `app` is imported,
+# because settings are read (and validated) at import time.
+os.environ.setdefault("SECRET_KEY", "test-only-jwt-signing-key-0123456789abcdef")
+os.environ.setdefault("SECRET_PEPPER", "test-only-password-pepper-0123456789abcdef")
+
 from collections.abc import AsyncGenerator
 
 import pytest_asyncio
@@ -8,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from app.api.deps import get_db
+from app.core.rate_limit import limiter
 from app.core.security import hash_password
 from app.db.base import Base
 from app.main import app
@@ -40,6 +47,13 @@ async def setup_test_schema():
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_rate_limits():
+    """Rate-limit counters are in-memory and global; start every test with a clean slate."""
+    limiter.reset()
+    yield
 
 
 @pytest_asyncio.fixture(scope="function")

@@ -13,14 +13,15 @@ class UserLogin(BaseModel):
 
 
 class TokenResponse(BaseModel):
+    """Only the short-lived access token goes into the body.
+
+    The refresh token is delivered as an httpOnly cookie and never appears in
+    JSON, so page scripts cannot read it.
+    """
+
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
     expires_in: int
     user_id: int
     username: str
     role: str
-
-
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str

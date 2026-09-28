@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.cookies import clear_refresh_cookie
 from app.api.deps import get_current_user, get_db
 from app.core.security import hash_password, verify_password
 from app.models.identity import UserIdentity
@@ -20,6 +21,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
 @router.post("/me/change-password", summary="Смена пароля с проверкой старого пароля")
 async def change_password(
     password_data: PasswordChange,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -45,5 +47,6 @@ async def change_password(
     # forces a fresh login everywhere, standard practice after a credential change.
     await AuthService.revoke_all_sessions(db, current_user.id)
     await db.commit()
+    clear_refresh_cookie(response)
 
     return {"status": "ok", "message": "Пароль успешно изменен. Все активные сессии завершены, требуется повторный вход."}

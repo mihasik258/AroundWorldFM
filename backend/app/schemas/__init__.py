@@ -1,5 +1,4 @@
 from app.schemas.auth import (
-    RefreshTokenRequest,
     TokenResponse,
     UserLogin,
     UserRegister,
@@ -18,7 +17,6 @@ __all__ = [
     "FavoriteCreate",
     "FavoriteRead",
     "PasswordChange",
-    "RefreshTokenRequest",
     "StationCreate",
     "StationQuery",
     "StationRead",
