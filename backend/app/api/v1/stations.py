@@ -9,9 +9,26 @@ from app.models.user import User
 from app.schemas.station import StationQuery, StationRead
 from app.services.now_playing_service import NowPlayingService
 from app.services.radio_service import RadioService
-from app.services.vibe_service import VIBE_LABELS, VibeService
+from app.services.vibe_service import VIBE_LABELS, VIBE_PATTERN, VibeService
 
 router = APIRouter(prefix="/stations", tags=["Радиостанции и избранное"])
+
+# Every excluded language adds an SQL condition; this only rejects abusive
+# requests. The catalogue has ~110 languages and the UI lets a user exclude
+# them one by one, so the cap must stay above that.
+MAX_EXCLUDED_LANGUAGES = 200
+
+
+def parse_excluded_languages(raw: str | None) -> list[str] | None:
+    if not raw:
+        return None
+    langs = [lang.strip() for lang in raw.split(",") if lang.strip()]
+    if len(langs) > MAX_EXCLUDED_LANGUAGES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Можно исключить не более {MAX_EXCLUDED_LANGUAGES} языков",
+        )
+    return langs
 
 
 @router.get(
@@ -20,12 +37,12 @@ router = APIRouter(prefix="/stations", tags=["Радиостанции и изб
     summary="Получить следующую радиостанцию по выбранному вайбу с исключением языков",
 )
 async def get_next_vibe_station(
-    vibe: str = Query("focus", description="Выбранный вайб (focus, night_drive, coffee, party, sunset, world_odyssey)"),
+    vibe: str = Query("focus", pattern=VIBE_PATTERN, description="Выбранный вайб (focus, night_drive, coffee, party, sunset, world_odyssey)"),
     exclude_languages: str | None = Query(None, description="Список исключаемых языков через запятую"),
     exclude_ids: str | None = Query(None, description="Список ID недавно прослушанных станций через запятую"),
     db: AsyncSession = Depends(get_db),
 ):
-    clean_exclude_langs = [lang.strip() for lang in exclude_languages.split(",") if lang.strip()] if exclude_languages else None
+    clean_exclude_langs = parse_excluded_languages(exclude_languages)
     clean_exclude_ids = [int(i.strip()) for i in exclude_ids.split(",") if i.strip().isdigit()] if exclude_ids else None
 
     station = await VibeService.get_next_station(
@@ -48,11 +65,11 @@ async def get_next_vibe_station(
     summary="Все станции выбранного вайба с координатами (для глобуса)",
 )
 async def get_vibe_stations(
-    vibe: str = Query("focus", description="Выбранный вайб (focus, night_drive, coffee, party, sunset, world_odyssey)"),
+    vibe: str = Query("focus", pattern=VIBE_PATTERN, description="Выбранный вайб (focus, night_drive, coffee, party, sunset, world_odyssey)"),
     exclude_languages: str | None = Query(None, description="Список исключаемых языков через запятую"),
     db: AsyncSession = Depends(get_db),
 ):
-    clean_exclude_langs = [lang.strip() for lang in exclude_languages.split(",") if lang.strip()] if exclude_languages else None
+    clean_exclude_langs = parse_excluded_languages(exclude_languages)
     return await VibeService.get_vibe_stations(
         db=db,
         vibe=vibe,
@@ -88,7 +105,7 @@ async def list_stations(
     languages: str | None = Query(None, description="Список языков через запятую"),
     country: str | None = Query(None, description="Страна"),
     search: str | None = Query(None, description="Поисковый запрос"),
-    limit: int = Query(50, ge=1, le=3000),
+    limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
 ):

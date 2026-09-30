@@ -83,5 +83,5 @@ class StationQuery(BaseModel):
     languages: str | None = Field(None, description="Comma-separated allowed languages")
     country: str | None = None
     search: str | None = None
-    limit: int = Field(50, ge=1, le=3000)
+    limit: int = Field(50, ge=1, le=200)
     offset: int = Field(0, ge=0)

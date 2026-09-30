@@ -6,6 +6,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import catalog_cache
 from app.core.config import settings
 from app.models.station import StationStream, StreamHealth
 
@@ -100,6 +101,8 @@ async def run_stream_health_check(db: AsyncSession) -> None:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
     await db.commit()
+    # Availability decides which stations the public catalogue shows
+    catalog_cache.clear()
 
     errors = [r for r in results if isinstance(r, BaseException)]
     if errors:

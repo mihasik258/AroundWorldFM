@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_role
+from app.core.cache import catalog_cache
 from app.models.session import UserSession
 from app.models.station import Station, StationStream, StreamHealth
 from app.models.user import User, UserRole
@@ -111,6 +112,7 @@ async def create_station(
     health = StreamHealth(stream_id=stream.id, is_active=True)
     db.add(health)
     await db.commit()
+    catalog_cache.clear()
     station = await _reload_station_with_streams(db, station.id)
     return RadioService._station_to_read(station)
 
@@ -150,6 +152,7 @@ async def update_station(
             primary.stream_url = new_stream_url
 
     await db.commit()
+    catalog_cache.clear()
     station = await _reload_station_with_streams(db, station_id)
     return RadioService._station_to_read(station)
 
@@ -162,6 +165,7 @@ async def delete_station(station_id: int, db: AsyncSession = Depends(get_db)):
 
     await db.delete(station)
     await db.commit()
+    catalog_cache.clear()
     return {"status": "ok", "message": f"Станция '{station.name}' успешно удалена"}
 
 

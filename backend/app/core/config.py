@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # Periodic purge of expired and revoked sessions
     SESSION_CLEANUP_INTERVAL_SECONDS: int = 3600
 
+    # Public station catalogue responses are cached this long (and dropped
+    # immediately on admin edits and after stream health checks)
+    CATALOG_CACHE_TTL_SECONDS: int = 60
+
     # Database: PostgreSQL 16 (asyncpg)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgrespassword@localhost:5432/aroundfm"
 

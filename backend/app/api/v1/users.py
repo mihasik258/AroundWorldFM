@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.cookies import clear_refresh_cookie
 from app.api.deps import get_current_user, get_db
-from app.core.security import hash_password, verify_password
+from app.core.security import hash_password_async, verify_password_async
 from app.models.identity import UserIdentity
 from app.models.user import User
 from app.schemas.user import PasswordChange, UserRead
@@ -36,13 +36,13 @@ async def change_password(
             detail="У данной учетной записи не установлен пароль",
         )
 
-    if not verify_password(password_data.old_password, identity.secret_hash):
+    if not await verify_password_async(password_data.old_password, identity.secret_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Текущий пароль указан неверно",
         )
 
-    identity.secret_hash = hash_password(password_data.new_password)
+    identity.secret_hash = await hash_password_async(password_data.new_password)
     # Revoke ALL sessions (including the current one) after password change —
     # forces a fresh login everywhere, standard practice after a credential change.
     await AuthService.revoke_all_sessions(db, current_user.id)

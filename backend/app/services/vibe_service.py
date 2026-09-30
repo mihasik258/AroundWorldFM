@@ -4,9 +4,10 @@ from sqlalchemy import func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import catalog_cache
 from app.models.station import Station, StationStream, StreamHealth
 from app.schemas.station import StationRead
-from app.services.radio_service import RadioService
+from app.services.radio_service import RadioService, csv_key
 
 # Strict, curated positive keywords for each Vibe
 VIBE_KEYWORDS = {
@@ -64,6 +65,11 @@ VIBE_LABELS = {
     "sunset": "Sunset Chill",
     "world_odyssey": "World Odyssey",
 }
+
+
+# Only known vibes are accepted: an unknown one used to skip the genre filter
+# and return the whole catalogue, the heaviest possible response.
+VIBE_PATTERN = "^(" + "|".join(VIBE_KEYWORDS) + ")$"
 
 
 def is_chatter_station(text: str) -> bool:
@@ -144,18 +150,29 @@ class VibeService:
         return stmt
 
     @staticmethod
+    async def _vibe_pool(
+        db: AsyncSession,
+        vibe: str,
+        exclude_languages: list[str] | None = None,
+    ) -> list[StationRead]:
+        """All playable stations of a vibe; shared by the globe and the "next" button."""
+        langs = csv_key(exclude_languages)
+
+        async def load() -> list[StationRead]:
+            result = await db.execute(VibeService.build_vibe_query(vibe, list(langs)))
+            return [RadioService._station_to_read(s) for s in result.scalars().all()]
+
+        return await catalog_cache.get_or_set(("vibe", vibe, langs), load)
+
+    @staticmethod
     async def get_vibe_stations(
         db: AsyncSession,
         vibe: str,
         exclude_languages: list[str] | None = None,
     ) -> list[StationRead]:
         """Every station of a vibe that can be placed on the globe."""
-        stmt = VibeService.build_vibe_query(vibe, exclude_languages).where(
-            Station.latitude.isnot(None),
-            Station.longitude.isnot(None),
-        )
-        result = await db.execute(stmt)
-        return [RadioService._station_to_read(s) for s in result.scalars().all()]
+        pool = await VibeService._vibe_pool(db, vibe, exclude_languages)
+        return [s for s in pool if s.latitude is not None and s.longitude is not None]
 
     @staticmethod
     async def get_next_station(
@@ -165,32 +182,21 @@ class VibeService:
         exclude_ids: list[int] | None = None,
     ) -> StationRead | None:
         """Finds the next optimal station strictly adhering to the selected vibe."""
-        clean_exclude_ids = [int(i) for i in (exclude_ids or []) if str(i).isdigit()]
-
-        stmt = VibeService.build_vibe_query(vibe, exclude_languages)
-
-        # Recent station IDs exclusion
-        filtered_stmt = stmt
-        if clean_exclude_ids:
-            filtered_stmt = stmt.where(Station.id.notin_(clean_exclude_ids))
-
-        result = await db.execute(filtered_stmt)
-        candidates = result.scalars().all()
-
-        if not candidates and clean_exclude_ids:
-            # Fall back to full vibe pool if all were recently heard
-            result = await db.execute(stmt)
-            candidates = result.scalars().all()
-
-        if not candidates:
-            return None
-
-        chosen = random.choice(candidates)
-        return RadioService._station_to_read(chosen)
+        pool = await VibeService._vibe_pool(db, vibe, exclude_languages)
+        recent = set(exclude_ids or [])
+        # Fall back to the full vibe pool if everything was heard recently
+        candidates = [s for s in pool if s.id not in recent] or pool
+        return random.choice(candidates) if candidates else None
 
     @staticmethod
     async def get_available_languages(db: AsyncSession) -> list[dict]:
         """Aggregates active station languages with station counts."""
+        return await catalog_cache.get_or_set(
+            ("vibe_languages",), lambda: VibeService._load_languages(db)
+        )
+
+    @staticmethod
+    async def _load_languages(db: AsyncSession) -> list[dict]:
         stmt = (
             select(Station.language, func.count(Station.id).label("count"))
             .join(Station.streams)

@@ -4,9 +4,20 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import catalog_cache
 from app.models.favorite import Favorite
 from app.models.station import Station, StationStream, StreamHealth
 from app.schemas.station import StationQuery, StationRead, StationStreamRead
+
+
+def csv_key(value: str | list[str] | None) -> tuple[str, ...]:
+    """Normalises a comma-separated filter into a canonical cache-key tuple.
+
+    Case, spacing, order and duplicates do not change the query result, so
+    "Rock, jazz" and "jazz,rock" share one cache entry.
+    """
+    items = value.split(",") if isinstance(value, str) else (value or [])
+    return tuple(sorted({i.strip().lower() for i in items if i and i.strip()}))
 
 
 class RadioService:
@@ -62,47 +73,38 @@ class RadioService:
         only_active: bool = True,
     ) -> list[StationRead]:
         """Fetches stations matching filters (genres, languages, country, search)."""
-        stmt = (
-            select(Station)
-            .join(Station.streams)
-            .join(StationStream.health)
-            .options(selectinload(Station.streams).selectinload(StationStream.health))
-            .distinct()
-        )
+        genres = () if (query_params.genres or "").strip().lower() == "any" else csv_key(query_params.genres)
+        languages = csv_key(query_params.languages)
+        country = (query_params.country or "").strip().lower()
+        search = (query_params.search or "").strip().lower()
+        key = ("stations", only_active, genres, languages, country, search,
+               query_params.limit, query_params.offset)
 
-        if only_active:
-            stmt = stmt.where(StationStream.is_primary == True, StreamHealth.is_active == True)
-
-        # Country filter
-        if query_params.country:
-            stmt = stmt.where(Station.country.ilike(f"%{query_params.country}%"))
-
-        # Language filter (supports comma-separated list of allowed languages)
-        if query_params.languages:
-            langs = [
-                item.strip().lower() for item in query_params.languages.split(",") if item.strip()
-            ]
-            if langs:
-                lang_conditions = [Station.language.ilike(f"%{lang}%") for lang in langs]
-                stmt = stmt.where(or_(*lang_conditions))
-
-        # Genre filter: array overlap using GIN index
-        if query_params.genres and query_params.genres.lower() != "any":
-            genres = [g.strip().lower() for g in query_params.genres.split(",") if g.strip()]
+        async def load() -> list[StationRead]:
+            stmt = (
+                select(Station)
+                .join(Station.streams)
+                .join(StationStream.health)
+                .options(selectinload(Station.streams).selectinload(StationStream.health))
+                .distinct()
+            )
+            if only_active:
+                stmt = stmt.where(StationStream.is_primary == True, StreamHealth.is_active == True)
+            if country:
+                stmt = stmt.where(Station.country.ilike(f"%{country}%"))
+            if languages:
+                stmt = stmt.where(or_(*[Station.language.ilike(f"%{lang}%") for lang in languages]))
             if genres:
-                stmt = stmt.where(Station.tags.overlap(genres))
+                # array overlap, served by the GIN index on tags
+                stmt = stmt.where(Station.tags.overlap(list(genres)))
+            if search:
+                pattern = f"%{search}%"
+                stmt = stmt.where(or_(Station.name.ilike(pattern), Station.country.ilike(pattern)))
+            stmt = stmt.order_by(Station.name.asc()).offset(query_params.offset).limit(query_params.limit)
+            result = await db.execute(stmt)
+            return [cls._station_to_read(st) for st in result.scalars().all()]
 
-        # Text search (in name or country)
-        if query_params.search:
-            s = f"%{query_params.search.strip()}%"
-            stmt = stmt.where(or_(Station.name.ilike(s), Station.country.ilike(s)))
-
-        stmt = (
-            stmt.order_by(Station.name.asc()).offset(query_params.offset).limit(query_params.limit)
-        )
-        result = await db.execute(stmt)
-        stations = result.scalars().all()
-        return [cls._station_to_read(st) for st in stations]
+        return await catalog_cache.get_or_set(key, load)
 
     @classmethod
     async def get_random_station(
@@ -112,27 +114,24 @@ class RadioService:
         languages: str | None = None,
     ) -> StationRead | None:
         """Returns a single random active station matching criteria."""
-        stmt = (
-            select(Station.id)
-            .join(Station.streams)
-            .join(StationStream.health)
-            .where(StationStream.is_primary == True, StreamHealth.is_active == True)
-        )
+        genre_list = () if (genres or "").strip().lower() == "any" else csv_key(genres)
+        lang_list = csv_key(languages)
 
-        if languages:
-            langs = [item.strip().lower() for item in languages.split(",") if item.strip()]
-            if langs:
-                lang_conditions = [Station.language.ilike(f"%{lang}%") for lang in langs]
-                stmt = stmt.where(or_(*lang_conditions))
-
-        if genres and genres.lower() != "any":
-            genre_list = [g.strip().lower() for g in genres.split(",") if g.strip()]
+        async def load_ids() -> list[int]:
+            stmt = (
+                select(Station.id)
+                .join(Station.streams)
+                .join(StationStream.health)
+                .where(StationStream.is_primary == True, StreamHealth.is_active == True)
+            )
+            if lang_list:
+                stmt = stmt.where(or_(*[Station.language.ilike(f"%{lang}%") for lang in lang_list]))
             if genre_list:
-                stmt = stmt.where(Station.tags.overlap(genre_list))
+                stmt = stmt.where(Station.tags.overlap(list(genre_list)))
+            return list((await db.execute(stmt)).scalars().all())
 
-        ids_res = await db.execute(stmt)
-        all_ids = ids_res.scalars().all()
-
+        # The candidate pool is cached; only the one chosen station is loaded
+        all_ids = await catalog_cache.get_or_set(("random_ids", genre_list, lang_list), load_ids)
         if not all_ids:
             return None
 
@@ -148,28 +147,33 @@ class RadioService:
     @staticmethod
     async def get_available_genres(db: AsyncSession) -> list[str]:
         """Returns distinct sorted genres/tags from stations using PostgreSQL unnest."""
-        stmt = select(func.unnest(Station.tags)).distinct()
-        res = await db.execute(stmt)
-        tags = [t.lower() for t in res.scalars().all() if t]
-        return sorted(list(set(tags)))
+
+        async def load() -> list[str]:
+            res = await db.execute(select(func.unnest(Station.tags)).distinct())
+            return sorted({t.lower() for t in res.scalars().all() if t})
+
+        return await catalog_cache.get_or_set(("genres",), load)
 
     @staticmethod
     async def get_available_languages(db: AsyncSession) -> list[str]:
         """Returns distinct sorted languages from active stations."""
-        stmt = (
-            select(Station.language)
-            .join(Station.streams)
-            .join(StationStream.health)
-            .where(
-                StationStream.is_primary == True,
-                StreamHealth.is_active == True,
-                Station.language.isnot(None),
+
+        async def load() -> list[str]:
+            stmt = (
+                select(Station.language)
+                .join(Station.streams)
+                .join(StationStream.health)
+                .where(
+                    StationStream.is_primary == True,
+                    StreamHealth.is_active == True,
+                    Station.language.isnot(None),
+                )
+                .distinct()
             )
-            .distinct()
-        )
-        res = await db.execute(stmt)
-        langs = [item.lower() for item in res.scalars().all() if item]
-        return sorted(set(langs))
+            res = await db.execute(stmt)
+            return sorted({item.lower() for item in res.scalars().all() if item})
+
+        return await catalog_cache.get_or_set(("languages",), load)
 
     @classmethod
     async def get_user_favorites(cls, db: AsyncSession, user_id: int) -> list[StationRead]:

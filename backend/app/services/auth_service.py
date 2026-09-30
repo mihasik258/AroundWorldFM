@@ -13,8 +13,9 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
-    hash_password,
-    verify_password,
+    hash_password_async,
+    verify_against_dummy,
+    verify_password_async,
 )
 from app.models.identity import UserIdentity
 from app.models.session import UserSession
@@ -111,7 +112,7 @@ class AuthService:
                 detail="Имя пользователя уже занято",
             )
 
-        hashed = hash_password(register_data.password)
+        hashed = await hash_password_async(register_data.password)
         new_user = User(
             email=register_data.email,
             username=register_data.username,
@@ -148,27 +149,20 @@ class AuthService:
         )
         result = await db.execute(stmt)
         user = result.scalar_one_or_none()
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Неверный логин или пароль",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Look up password identity
-        pwd_identity = next(
-            (i for i in user.identities if i.provider == "password"),
-            None,
+        pwd_identity = (
+            next((i for i in user.identities if i.provider == "password"), None) if user else None
         )
-        if not pwd_identity or not pwd_identity.secret_hash:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Для данной учетной записи пароль не задан. Используйте внешний вход.",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
 
-        if not verify_password(login_data.password, pwd_identity.secret_hash):
+        # Every failure path costs one bcrypt check and returns the same message:
+        # an unknown login, an account without a password and a wrong password
+        # must be indistinguishable by both response text and response time.
+        if not pwd_identity or not pwd_identity.secret_hash:
+            await verify_against_dummy(login_data.password)
+            password_ok = False
+        else:
+            password_ok = await verify_password_async(login_data.password, pwd_identity.secret_hash)
+
+        if not password_ok:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Неверный логин или пароль",

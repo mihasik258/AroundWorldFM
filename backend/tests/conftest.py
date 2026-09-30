@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from app.api.deps import get_db
+from app.core.cache import catalog_cache
 from app.core.rate_limit import limiter
 from app.core.security import hash_password
 from app.db.base import Base
@@ -53,6 +54,13 @@ async def setup_test_schema():
 async def reset_rate_limits():
     """Rate-limit counters are in-memory and global; start every test with a clean slate."""
     limiter.reset()
+    yield
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_catalog_cache():
+    """The catalogue cache is process-wide; tables are truncated between tests, so must it be."""
+    catalog_cache.clear()
     yield
 
 
