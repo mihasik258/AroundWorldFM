@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import settings
 
-# Production engine settings for PostgreSQL 16 (asyncpg)
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
@@ -24,7 +23,6 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Dependency for providing an async database session per request."""
     async with AsyncSessionLocal() as session:
         try:
             yield session

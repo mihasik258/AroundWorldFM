@@ -45,7 +45,6 @@ export const Player: React.FC<PlayerProps> = ({ onOpenAuth }) => {
     spotify_url: string | null;
   } | null>(null);
 
-  // Local time where the station transmits, from its longitude
   const localTimeInfo = useMemo(() => {
     if (!currentStation || currentStation.longitude == null) return null;
 
@@ -157,7 +156,6 @@ export const Player: React.FC<PlayerProps> = ({ onOpenAuth }) => {
 
   return (
     <section className="console arrive arrive-2">
-      {/* The divider between planet and panel is the five-minute timer. */}
       <div className="rotation-track">
         <div className="rotation-fill" style={{ width: `${timerPercent}%` }} />
       </div>

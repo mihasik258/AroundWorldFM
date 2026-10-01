@@ -10,17 +10,7 @@ _MISSING = object()
 
 
 class TTLCache:
-    """Small in-process cache for public, rarely changing data.
-
-    - entries expire after `ttl` seconds and the oldest are evicted past
-      `max_entries`, so varying query strings cannot grow memory unbounded;
-    - concurrent misses on one key wait for a single producer instead of each
-      hitting the database — otherwise every expiry under load becomes a
-      burst of identical heavy queries;
-    - clear() bumps a generation counter: a value computed from data read
-      before the clear is returned to its caller but never stored, so a
-      request racing an update cannot re-insert stale data.
-    """
+    """In-process TTL cache."""
 
     def __init__(self, ttl: float, max_entries: int):
         self.ttl = ttl
@@ -48,7 +38,7 @@ class TTLCache:
         lock = self._locks.setdefault(key, asyncio.Lock())
         try:
             async with lock:
-                value = self._get(key)  # filled while we were waiting
+                value = self._get(key)
                 if value is not _MISSING:
                     return value
                 generation = self._generation
@@ -68,7 +58,4 @@ class TTLCache:
         self._data.clear()
 
 
-# Station catalogue: identical for every visitor, changes only when an admin
-# edits stations or the health check flips stream availability. Both of those
-# call catalog_cache.clear().
 catalog_cache = TTLCache(ttl=settings.CATALOG_CACHE_TTL_SECONDS, max_entries=512)

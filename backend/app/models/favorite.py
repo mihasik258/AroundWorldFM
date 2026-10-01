@@ -14,7 +14,7 @@ UTC = timezone.utc
 
 
 class Favorite(Base):
-    """User's favorite radio station."""
+    """Favorite station."""
 
     __tablename__ = "favorites"
     __table_args__ = (UniqueConstraint("user_id", "station_id", name="uq_user_station_favorite"),)

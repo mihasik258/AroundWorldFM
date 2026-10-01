@@ -13,7 +13,7 @@ UTC = timezone.utc
 
 
 class UserSession(Base):
-    """Tracks active user sessions."""
+    """User session."""
 
     __tablename__ = "user_sessions"
 
@@ -24,9 +24,6 @@ class UserSession(Base):
     refresh_token_hash: Mapped[str] = mapped_column(
         String(64), unique=True, index=True, nullable=False
     )
-    # Refresh tokens are rotated on every use. The hash of the token that was just
-    # replaced is kept so that presenting it again can be told apart from an
-    # unknown token: shortly after rotation it's a race, later it's theft.
     previous_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     device_name: Mapped[str | None] = mapped_column(String(64), nullable=True)

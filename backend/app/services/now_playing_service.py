@@ -4,7 +4,6 @@ import urllib.parse
 
 import httpx
 
-# In-memory cache for live track metadata: station_id -> (timestamp, data)
 _METADATA_CACHE: dict[int, tuple[float, dict]] = {}
 CACHE_TTL_SECONDS = 20.0
 
@@ -12,7 +11,6 @@ CACHE_TTL_SECONDS = 20.0
 class NowPlayingService:
     @classmethod
     async def get_now_playing(cls, station_id: int, stream_url: str) -> dict:
-        """Extracts live track metadata (ICY) from the station stream and formats Spotify search link."""
         now = time.time()
         cached = _METADATA_CACHE.get(station_id)
         if cached and (now - cached[0]) < CACHE_TTL_SECONDS:
@@ -47,7 +45,6 @@ class NowPlayingService:
                     if metaint <= 0 or metaint > 65536:
                         return None
 
-                    # Read up to 2 metaint chunks to catch metadata frame
                     buf = bytearray()
                     target_bytes = metaint * 2 + 512
                     async for chunk in resp.aiter_bytes():
@@ -64,11 +61,9 @@ class NowPlayingService:
                     if not raw_title:
                         return None
 
-                    # Clean unwanted tags like "StreamTitle=' - ';" or station ads
                     if raw_title in ["-", "--", "Unknown", "Various Artists", "Ad"]:
                         return None
 
-                    # Split "Artist - Title"
                     artist = ""
                     title = raw_title
                     if " - " in raw_title:
@@ -76,7 +71,6 @@ class NowPlayingService:
                         artist = parts[0].strip()
                         title = parts[1].strip()
 
-                    # Filter out purely station station names if title matches station name
                     clean_query = f"{artist} {title}".strip() if artist else title
                     clean_query = re.sub(r"\[.*?\]|\(.*?\)", "", clean_query).strip()
 

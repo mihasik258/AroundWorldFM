@@ -17,7 +17,6 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  // Password change form
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [pwdLoading, setPwdLoading] = useState(false);
@@ -29,7 +28,7 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
       const data = await apiRequest<UserSession[]>('/auth/sessions');
       setSessions(data);
     } catch (err: any) {
-      setMessage({ text: err.message || 'Ошибка загрузки сессий', type: 'error' });
+      setMessage({ text: err.message || 'Ошибка загрузки', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -42,7 +41,6 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
   }, [isOpen]);
 
   const handleRevoke = async (sessionId: number) => {
-    // Ending the session of this very device is just a logout
     if (sessions.find((s) => s.id === sessionId)?.is_current) {
       await logout();
       onClose();
@@ -52,23 +50,23 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
     try {
       await apiRequest(`/auth/sessions/${sessionId}`, { method: 'DELETE' });
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-      setMessage({ text: 'Сессия успешно завершена', type: 'success' });
+      setMessage({ text: 'Сессия завершена', type: 'success' });
     } catch (err: any) {
-      setMessage({ text: err.message || 'Не удалось отозвать сессию', type: 'error' });
+      setMessage({ text: err.message || 'Ошибка', type: 'error' });
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleRevokeAll = async () => {
-    if (!confirm('Вы уверены, что хотите завершить сеансы на всех устройствах?')) return;
+    if (!confirm('Завершить остальные сессии?')) return;
     setActionLoading(true);
     try {
       const res = await apiRequest('/auth/sessions/revoke-all', { method: 'POST' });
-      setMessage({ text: res.message || 'Сессии на других устройствах завершены', type: 'success' });
+      setMessage({ text: res.message || 'Сессии завершены', type: 'success' });
       loadSessions();
     } catch (err: any) {
-      setMessage({ text: err.message || 'Ошибка отзыва всех сессий', type: 'error' });
+      setMessage({ text: err.message || 'Ошибка', type: 'error' });
     } finally {
       setActionLoading(false);
     }
@@ -84,14 +82,13 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
         method: 'POST',
         body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
       });
-      // The server ends every session, this one included
-      alert(res.message || 'Пароль изменён. Войдите заново с новым паролем.');
+      alert(res.message || 'Пароль изменён');
       setOldPassword('');
       setNewPassword('');
       await logout();
       onClose();
     } catch (err: any) {
-      setMessage({ text: err.message || 'Ошибка смены пароля', type: 'error' });
+      setMessage({ text: err.message || 'Ошибка', type: 'error' });
     } finally {
       setPwdLoading(false);
     }
@@ -102,7 +99,6 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
   return (
     <div className="modal-backdrop">
       <div className="glass-panel rounded-3xl p-6 sm:p-8 w-full max-w-lg relative shadow-2xl border border-slate-700/80 max-h-[90vh] flex flex-col">
-        {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute right-5 top-5 text-slate-400 hover:text-white p-1 rounded-lg bg-slate-800/60"
@@ -110,7 +106,6 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
           <X className="w-5 h-5" />
         </button>
 
-        {/* Title */}
         <div className="flex items-center gap-3 mb-5">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
             <ShieldCheck className="w-5 h-5" />
@@ -121,7 +116,6 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="flex items-center gap-2 border-b border-slate-800 pb-3 mb-4">
           <button
             onClick={() => { setActiveTab('sessions'); setMessage(null); }}
@@ -148,7 +142,6 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
           </button>
         </div>
 
-        {/* Status Message Alert */}
         {message && (
           <div
             className={`mb-4 p-3 rounded-xl text-xs flex items-center gap-2 ${
@@ -166,7 +159,6 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
           </div>
         )}
 
-        {/* Tab 1: Sessions List */}
         {activeTab === 'sessions' && (
           <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-3">
             {loading ? (
@@ -233,7 +225,6 @@ export const SessionsModal: React.FC<SessionsModalProps> = ({ isOpen, onClose })
           </div>
         )}
 
-        {/* Tab 2: Password Change */}
         {activeTab === 'password' && (
           <form onSubmit={handlePasswordChange} className="flex flex-col gap-3.5 py-2">
             <div>

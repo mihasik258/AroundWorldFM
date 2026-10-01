@@ -3,7 +3,7 @@ import { apiRequest } from '../api/client';
 import { RadioStation } from '../types';
 import { useAuth } from './AuthContext';
 
-const ROTATION_SECONDS = 300; // 5 minutes
+const ROTATION_SECONDS = 300;
 
 interface PlayerContextType {
   currentStation: RadioStation | null;
@@ -19,7 +19,6 @@ interface PlayerContextType {
   isFavorite: (stationId: number) => boolean;
   toggleFavorite: (station: RadioStation) => Promise<void>;
 
-  // Vibe & Continuous Rotation
   currentVibe: string;
   setVibe: (vibe: string) => void;
   excludedLanguages: string[];
@@ -42,7 +41,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [volume, setVolumeState] = useState<number>(0.8);
   const [favorites, setFavorites] = useState<RadioStation[]>([]);
 
-  // Vibe & Blacklist State (reads URL query ?vibe=... from Telegram deep links)
   const [currentVibe, setCurrentVibeState] = useState<string>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -70,7 +68,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const skipNextRef = useRef<() => void>(() => {});
   const isSkippingRef = useRef<boolean>(false);
 
-  // Initialize audio element once
   useEffect(() => {
     const audio = new Audio();
     audio.preload = 'none';
@@ -91,7 +88,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       stallTimeout = setTimeout(() => {
         const st = currentStationRef.current;
         if (st && audio.readyState < 2) {
-          console.warn(`Stream for "${st.name}" stalled for > 7s. Auto-skipping...`);
+          console.warn(`Stream stalled: ${st.name}`);
           skipNextRef.current();
         }
       }, 7000);
@@ -100,26 +97,24 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     audio.addEventListener('error', () => {
       if (stallTimeout) clearTimeout(stallTimeout);
 
-      // Ignore user-aborted switch track events (code 1)
       if (audio.error && audio.error.code === 1) {
         return;
       }
 
       const st = currentStationRef.current;
-      // If direct stream failed, try backend proxy fallback automatically
       if (st && !audio.src.includes(`/api/v1/stations/${st.id}/stream`)) {
-        console.warn(`Direct stream failed for ${st.name}. Trying backend proxy...`);
+        console.warn(`Direct stream failed: ${st.name}`);
         setIsLoading(true);
         audio.src = `/api/v1/stations/${st.id}/stream`;
         audio.play().catch((e) => {
           if (e.name === 'AbortError' || e.name === 'NotAllowedError') return;
-          console.warn(`Proxy also failed for ${st.name}. Auto-skipping to next station...`);
+          console.warn(`Proxy stream failed: ${st.name}`);
           skipNextRef.current();
         });
         return;
       }
 
-      console.warn(`Stream completely failed for ${st?.name}. Auto-skipping to next station...`);
+      console.warn(`Stream failed: ${st?.name}`);
       skipNextRef.current();
     });
 
@@ -132,7 +127,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, []);
 
-  // Fetch favorites when authenticated
   const fetchFavorites = async () => {
     if (!isAuthenticated) {
       setFavorites([]);
@@ -157,24 +151,21 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setCurrentStation(station);
     currentStationRef.current = station;
 
-    // Add to recent list
     recentIdsRef.current = [station.id, ...recentIdsRef.current.filter((id) => id !== station.id)].slice(0, 15);
 
     const audio = audioRef.current;
     audio.pause();
-    // Reset timer on manual or new track start
     setRotationSecondsLeft(ROTATION_SECONDS);
 
     audio.src = station.stream_url;
     audio.play().catch((err) => {
       if (err.name === 'AbortError') return;
       if (err.name === 'NotAllowedError') {
-        // Browser Autoplay Policy: waiting for user gesture
         setIsLoading(false);
         setIsPlaying(false);
         return;
       }
-      console.warn('Direct play error, switching to proxy fallback:', err);
+      console.warn('Direct play failed', err);
       audio.src = `/api/v1/stations/${station.id}/stream`;
       audio.play().catch((e) => {
         if (e.name === 'AbortError' || e.name === 'NotAllowedError') {
@@ -184,7 +175,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
         setIsLoading(false);
         setIsPlaying(false);
-        setError('Не удалось подключиться к аудиопотоку');
+        setError('Поток недоступен');
       });
     });
   }, []);
@@ -210,8 +201,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const station = await apiRequest<RadioStation>(`/stations/vibe/next?${params.toString()}`);
       playStation(station);
     } catch (err: any) {
-      console.error('Failed to load next vibe station', err);
-      setError(err.message || 'Нет доступных станций для выбранного вайба');
+      console.error('Failed to load station', err);
+      setError(err.message || 'Нет станций');
       setIsLoading(false);
     } finally {
       isSkippingRef.current = false;
@@ -229,7 +220,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const setExcludedLanguages = (langs: string[]) => {
     setExcludedLanguagesState(langs);
     localStorage.setItem('aroundfm_excluded_languages', JSON.stringify(langs));
-    // If currently playing station is in excluded languages, skip to next immediately
     if (currentStation?.language && langs.map((l) => l.toLowerCase()).includes(currentStation.language.toLowerCase())) {
       skipNext();
     }
@@ -243,14 +233,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setExcludedLanguages(updated);
   };
 
-  // 5-minute Auto-rotation ticker
   useEffect(() => {
     if (!isPlaying || !isAutoRotateEnabled) return;
 
     const interval = setInterval(() => {
       setRotationSecondsLeft((prev) => {
         if (prev <= 1) {
-          // Time to rotate!
           skipNext();
           return ROTATION_SECONDS;
         }
@@ -265,7 +253,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!audioRef.current) return;
 
     if (!currentStation) {
-      // If nothing loaded yet, start with next station in current vibe
       skipNext();
       return;
     }
@@ -296,7 +283,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const station = await apiRequest<RadioStation>(`/stations/random${qs}`);
       playStation(station);
     } catch (err: any) {
-      setError(err.message || 'Нет доступных станций');
+      setError(err.message || 'Нет станций');
       setIsLoading(false);
     }
   };

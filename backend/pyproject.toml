@@ -37,7 +37,6 @@ select = ["E", "F", "I", "UP"]
 ignore = ["E501", "E712", "UP042", "UP017"]
 
 [tool.ruff.lint.per-file-ignores]
-# test secrets must be set in the environment before the app is imported
 "tests/conftest.py" = ["E402"]
 
 [tool.pytest.ini_options]

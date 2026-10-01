@@ -50,7 +50,6 @@ class User(Base):
         nullable=False,
     )
 
-    # Relationships
     identities: Mapped[list["UserIdentity"]] = relationship(
         "UserIdentity", back_populates="user", cascade="all, delete-orphan", lazy="selectin"
     )

@@ -53,7 +53,6 @@ const COUNTRY_COORDS: Record<string, { lat: number; lng: number }> = {
 
 const RADIUS = 78;
 
-/** Surface point for a lat/lon, in the globe's local frame. */
 const toVector = (lat: number, lon: number, r = RADIUS) => {
   const phi = (90 - lat) * (Math.PI / 180);
   const theta = (lon + 180) * (Math.PI / 180);
@@ -64,7 +63,6 @@ const toVector = (lat: number, lon: number, r = RADIUS) => {
   );
 };
 
-/** Subsolar point for a moment — drives the terminator and the lit pins. */
 const solarPosition = (now: Date) => {
   const utcHours = now.getUTCHours() + now.getUTCMinutes() / 60;
   const lon = (12 - utcHours) * 15;
@@ -135,17 +133,12 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     return () => clearInterval(id);
   }, []);
 
-  // The land is drawn as a dot matrix rather than filled shapes: continents
-  // read as a grid of emitters, which is what the sphere is — a map of
-  // transmitters. Rendered once; the tuned station is marked by the beacon, so
-  // nothing here needs redrawing when the station changes.
   useEffect(() => {
     if (!geoData) return;
 
     const W = 2048;
     const H = 1024;
 
-    // 1. Land mask, offscreen
     const mask = document.createElement('canvas');
     mask.width = W;
     mask.height = H;
@@ -186,7 +179,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
 
     const maskData = mctx.getImageData(0, 0, W, H).data;
 
-    // 2. Paint the sphere texture
     let canvas = canvasRef.current;
     if (!canvas) {
       canvas = document.createElement('canvas');
@@ -199,7 +191,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     ctx.fillStyle = '#050a14';
     ctx.fillRect(0, 0, W, H);
 
-    // Graticule: only lines that mean something, drawn under the dots
     ctx.strokeStyle = 'rgba(120, 200, 220, 0.11)';
     ctx.lineWidth = 1.5;
     const latY = (lat: number) => ((90 - lat) / 180) * H;
@@ -222,8 +213,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
       ctx.restore();
     }
 
-    // Dot matrix over the land mask. Spacing shrinks toward the poles so the
-    // equirectangular stretch does not smear the dots into lines.
     const STEP = 6;
     ctx.fillStyle = '#dfe9ee';
     for (let y = 0; y < H; y += STEP) {
@@ -240,7 +229,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     if (textureRef.current) textureRef.current.needsUpdate = true;
   }, [geoData]);
 
-  // Scene
   useEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
@@ -251,7 +239,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 2000);
 
-    // Fit the sphere to the narrower axis, or it is cropped on a phone.
     const fitCamera = (w: number, h: number) => {
       const halfFov = (camera.fov * Math.PI) / 180 / 2;
       const distForHeight = (RADIUS * 1.28) / Math.tan(halfFov);
@@ -284,8 +271,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     texture.wrapT = THREE.ClampToEdgeWrapping;
     textureRef.current = texture;
 
-    // Sphere. Emissive through the same map keeps the night hemisphere alive
-    // as a field of cold lights instead of a black hole.
     const sphere = new THREE.Mesh(
       new THREE.SphereGeometry(RADIUS, 96, 96),
       new THREE.MeshStandardMaterial({
@@ -299,7 +284,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     );
     globeGroup.add(sphere);
 
-    // Fresnel halo: the atmosphere seen edge-on, brightest at the limb.
     const atmosphere = new THREE.Mesh(
       new THREE.SphereGeometry(RADIUS * 1.055, 64, 64),
       new THREE.ShaderMaterial({
@@ -335,7 +319,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     );
     scene.add(atmosphere);
 
-    // Starfield, so the surround has depth instead of flat black
     const starCount = 1400;
     const starPos = new Float32Array(starCount * 3);
     for (let i = 0; i < starCount; i++) {
@@ -356,8 +339,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     globeGroup.add(stationPinsGroup);
     stationPinsGroupRef.current = stationPinsGroup;
 
-    // Beacon: the tuned station throws a shaft of light off the surface, with
-    // rings running out from its foot.
     const beacon = new THREE.Group();
     beacon.visible = false;
     globeGroup.add(beacon);
@@ -415,8 +396,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
       rings.push(ring);
     }
 
-    // Real-time solar lighting, in the globe's frame so the terminator stays
-    // over the right longitude while the user spins.
     scene.add(new THREE.AmbientLight(0x1a2740, 0.55));
 
     const sunLight = new THREE.DirectionalLight(0xfff2d8, 2.5);
@@ -433,7 +412,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     updateSunPosition();
     updateSunRef.current = updateSunPosition;
 
-    // Spin to tune
     let isDragging = false;
     let previous = { x: 0, y: 0 };
     let velocityX = 0;
@@ -529,7 +507,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     };
     window.addEventListener('resize', handleResize);
 
-    // The stage is a flexible grid row and can resize without the window.
     const observer = new ResizeObserver(handleResize);
     observer.observe(container);
 
@@ -550,7 +527,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
           targetRotationRef.current = null;
         }
       } else if (!isDragging && (Math.abs(velocityX) > 0.0001 || Math.abs(velocityY) > 0.0001)) {
-        // Inertia after release only — never any idle self-rotation.
         globeGroup.rotation.y += velocityX;
         globeGroup.rotation.x += velocityY;
         globeGroup.rotation.x = Math.max(-1.1, Math.min(1.1, globeGroup.rotation.x));
@@ -589,8 +565,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     };
   }, []);
 
-  // Pins for every station of the current vibe. Night-side ones burn warm like
-  // lit windows; day-side ones sit cool against the sunlit dots.
   useEffect(() => {
     if (!stationPinsGroupRef.current) return;
     const group = stationPinsGroupRef.current;
@@ -627,8 +601,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     group.add(mesh);
   }, [stations, sunTick]);
 
-  // Plant the beacon and bring the station under the needle, however the
-  // change was made.
   useEffect(() => {
     const beacon = beaconRef.current;
     if (!beacon) return;
@@ -641,7 +613,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
 
     const p = toVector(c.lat, c.lon);
     beacon.position.copy(p);
-    // Stand the beacon up along the surface normal.
     beacon.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p.clone().normalize());
     beacon.visible = true;
 
@@ -655,7 +626,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     <>
       <div ref={containerRef} className="stage-canvas" />
 
-      {/* The needle. Fixed at centre; the planet turns beneath it. */}
       <div className={`needle${isTuning ? ' is-tuning' : ''}`} aria-hidden="true">
         <svg width="120" height="120" viewBox="-60 -60 120 120">
           <line className="needle-line" x1="0" y1="-58" x2="0" y2="-20" />

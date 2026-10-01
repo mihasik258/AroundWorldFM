@@ -1,7 +1,5 @@
 import os
 
-# Test-only secrets. They must be in the environment before `app` is imported,
-# because settings are read (and validated) at import time.
 os.environ.setdefault("SECRET_KEY", "test-only-jwt-signing-key-0123456789abcdef")
 os.environ.setdefault("SECRET_PEPPER", "test-only-password-pepper-0123456789abcdef")
 
@@ -22,7 +20,6 @@ from app.main import app
 from app.models.identity import UserIdentity
 from app.models.user import User, UserRole
 
-# Isolated test database URL
 TEST_DB_URL = os.getenv("TEST_DATABASE_URL", "postgresql+asyncpg://postgres:postgrespassword@localhost:5432/aroundfm_test")
 
 test_engine = create_async_engine(
@@ -42,7 +39,6 @@ TestingSessionLocal = async_sessionmaker(
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_test_schema():
-    """Initializes schema once per test session."""
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -52,21 +48,18 @@ async def setup_test_schema():
 
 @pytest_asyncio.fixture(autouse=True)
 async def reset_rate_limits():
-    """Rate-limit counters are in-memory and global; start every test with a clean slate."""
     limiter.reset()
     yield
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def reset_catalog_cache():
-    """The catalogue cache is process-wide; tables are truncated between tests, so must it be."""
     catalog_cache.clear()
     yield
 
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Provides a fresh database session per test and truncates tables afterwards."""
     async with TestingSessionLocal() as session:
         yield session
 
@@ -80,8 +73,6 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    """Provides an async HTTP test client using the test database session."""
-
     async def override_get_db():
         yield db_session
 
@@ -96,7 +87,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
 @pytest_asyncio.fixture
 async def create_users(db_session: AsyncSession):
-    """Creates a regular user and an admin user with UserIdentity in the test database."""
     user = User(
         email="testuser@example.com",
         username="testuser",
@@ -129,4 +119,3 @@ async def create_users(db_session: AsyncSession):
     await db_session.refresh(user)
     await db_session.refresh(admin)
     return {"user": user, "admin": admin}
-

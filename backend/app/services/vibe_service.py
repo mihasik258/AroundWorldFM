@@ -9,7 +9,6 @@ from app.models.station import Station, StationStream, StreamHealth
 from app.schemas.station import StationRead
 from app.services.radio_service import RadioService, csv_key
 
-# Strict, curated positive keywords for each Vibe
 VIBE_KEYWORDS = {
     "focus": [
         "ambient", "drone", "soundscape", "neoclassical", "piano", "sleep",
@@ -37,7 +36,6 @@ VIBE_KEYWORDS = {
     ],
 }
 
-# Negative keywords to prevent vibe contamination
 VIBE_EXCLUSIONS = {
     "focus": ["dance", "pop", "party", "edm", "rap", "hip hop", "metal", "techno", "rock"],
     "night_drive": ["classical", "acoustic", "country", "folk", "news", "schlager"],
@@ -47,7 +45,6 @@ VIBE_EXCLUSIONS = {
     "world_odyssey": ["eurodance", "edm", "techno", "metal", "house"],
 }
 
-# Unwanted chatter keywords (news, talk, politics, traffic, sports)
 CHATTER_KEYWORDS = [
     "news", "talk", "speech", "spoken", "politics", "traffic", "weather",
     "information", "nachrichten", "actualité", "noticias", "notícias",
@@ -67,13 +64,10 @@ VIBE_LABELS = {
 }
 
 
-# Only known vibes are accepted: an unknown one used to skip the genre filter
-# and return the whole catalogue, the heaviest possible response.
 VIBE_PATTERN = "^(" + "|".join(VIBE_KEYWORDS) + ")$"
 
 
 def is_chatter_station(text: str) -> bool:
-    """Returns True if the station is news, talk, sports, or spoken chatter."""
     text_low = text.lower()
     for kw in CHATTER_KEYWORDS:
         if kw in text_low:
@@ -82,21 +76,17 @@ def is_chatter_station(text: str) -> bool:
 
 
 def infer_vibes(tags: str, name: str = "") -> list[str]:
-    """Infers strict, unadulterated musical vibes based on station tags and name."""
     text = f"{tags.lower()} {name.lower()}"
 
-    # Instantly reject chatter/news from any vibe
     if is_chatter_station(text):
         return []
 
     matched = []
     for vibe, keywords in VIBE_KEYWORDS.items():
-        # Check if positive keyword matches
         has_positive = any(kw in text for kw in keywords)
         if not has_positive:
             continue
 
-        # Check if negative exclusions match
         exclusions = VIBE_EXCLUSIONS.get(vibe, [])
         has_negative = any(ex in text for ex in exclusions)
         if has_negative:
@@ -104,14 +94,12 @@ def infer_vibes(tags: str, name: str = "") -> list[str]:
 
         matched.append(vibe)
 
-    # DO NOT use generic fallback vibes! If no pure vibe matches, return empty.
     return matched
 
 
 class VibeService:
     @staticmethod
     def build_vibe_query(vibe: str, exclude_languages: list[str] | None = None):
-        """Builds optimized PostgreSQL query for stations of a given vibe."""
         vibe = vibe.lower().strip()
         keywords = VIBE_KEYWORDS.get(vibe, [])
         exclusions = VIBE_EXCLUSIONS.get(vibe, [])
@@ -126,18 +114,14 @@ class VibeService:
             .where(StationStream.is_primary == True, StreamHealth.is_active == True)
         )
 
-        # Positive keywords via GIN index array overlap
         if keywords:
             stmt = stmt.where(Station.tags.overlap(keywords))
 
-        # Negative exclusions
         if exclusions:
             stmt = stmt.where(not_(Station.tags.overlap(exclusions)))
 
-        # Chatter exclusions
         stmt = stmt.where(not_(Station.tags.overlap(CHATTER_KEYWORDS)))
 
-        # Language Blacklist
         if clean_exclude_langs:
             for el in clean_exclude_langs:
                 stmt = stmt.where(
@@ -155,7 +139,6 @@ class VibeService:
         vibe: str,
         exclude_languages: list[str] | None = None,
     ) -> list[StationRead]:
-        """All playable stations of a vibe; shared by the globe and the "next" button."""
         langs = csv_key(exclude_languages)
 
         async def load() -> list[StationRead]:
@@ -170,7 +153,6 @@ class VibeService:
         vibe: str,
         exclude_languages: list[str] | None = None,
     ) -> list[StationRead]:
-        """Every station of a vibe that can be placed on the globe."""
         pool = await VibeService._vibe_pool(db, vibe, exclude_languages)
         return [s for s in pool if s.latitude is not None and s.longitude is not None]
 
@@ -181,16 +163,13 @@ class VibeService:
         exclude_languages: list[str] | None = None,
         exclude_ids: list[int] | None = None,
     ) -> StationRead | None:
-        """Finds the next optimal station strictly adhering to the selected vibe."""
         pool = await VibeService._vibe_pool(db, vibe, exclude_languages)
         recent = set(exclude_ids or [])
-        # Fall back to the full vibe pool if everything was heard recently
         candidates = [s for s in pool if s.id not in recent] or pool
         return random.choice(candidates) if candidates else None
 
     @staticmethod
     async def get_available_languages(db: AsyncSession) -> list[dict]:
-        """Aggregates active station languages with station counts."""
         return await catalog_cache.get_or_set(
             ("vibe_languages",), lambda: VibeService._load_languages(db)
         )

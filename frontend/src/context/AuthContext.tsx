@@ -39,8 +39,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    // The access token is kept in memory and is gone after a page reload.
-    // The refresh cookie survives, so restore the session silently.
     (async () => {
       const fresh = await refreshAccessToken();
       if (fresh) {
@@ -61,7 +59,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       body: JSON.stringify({ login: loginText, password: passwordText }),
     });
 
-    // The refresh token arrives as an httpOnly cookie and never reaches JS
     setAccessToken(data.access_token);
     setToken(data.access_token);
     await fetchCurrentUser();
@@ -72,17 +69,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       method: 'POST',
       body: JSON.stringify({ email, username, password: passwordText }),
     });
-    // Auto login after registration
     await login(username, passwordText);
   };
 
   const logout = async () => {
-    // Revoke the session on the server and delete the refresh cookie; without
-    // this the cookie would silently log the user back in on the next reload.
     try {
       await apiRequest('/auth/logout', { method: 'POST' });
     } catch {
-      // Still clear local state even if the server is unreachable
     }
     clearAuth();
   };

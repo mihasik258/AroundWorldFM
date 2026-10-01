@@ -58,7 +58,6 @@ export const LanguageFilterModal: React.FC<LanguageFilterModalProps> = ({ isOpen
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
       <div className="relative w-full max-w-lg bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-800/40">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400">
@@ -79,7 +78,6 @@ export const LanguageFilterModal: React.FC<LanguageFilterModalProps> = ({ isOpen
           </button>
         </div>
 
-        {/* Search & Actions */}
         <div className="p-4 border-b border-white/5 bg-slate-900/50 flex items-center gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
@@ -102,7 +100,6 @@ export const LanguageFilterModal: React.FC<LanguageFilterModalProps> = ({ isOpen
           )}
         </div>
 
-        {/* Language Grid */}
         <div className="p-4 overflow-y-auto flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
           {isLoading ? (
             <div className="col-span-2 py-8 text-center text-xs text-slate-500">Загрузка языков...</div>
@@ -146,7 +143,6 @@ export const LanguageFilterModal: React.FC<LanguageFilterModalProps> = ({ isOpen
           )}
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-white/10 bg-slate-800/40 flex items-center justify-between">
           <div className="text-xs text-slate-400">
             {excludedLanguages.length === 0 ? (

@@ -13,7 +13,7 @@ UTC = timezone.utc
 
 
 class UserIdentity(Base):
-    """External or local authentication identity for a user."""
+    """Login method."""
 
     __tablename__ = "user_identities"
     __table_args__ = (
@@ -24,9 +24,9 @@ class UserIdentity(Base):
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    provider: Mapped[str] = mapped_column(String(32), nullable=False)  # e.g. "password", "telegram"
-    provider_uid: Mapped[str] = mapped_column(String(255), nullable=False)  # username/email or telegram_id
-    secret_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)  # bcrypt hashed password
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_uid: Mapped[str] = mapped_column(String(255), nullable=False)
+    secret_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

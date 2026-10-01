@@ -13,23 +13,15 @@ export class ApiError extends Error {
   }
 }
 
-// The access token lives only in memory: unlike localStorage, a variable does
-// not outlive the page and is not sitting in storage for a script to harvest.
-// The refresh token is an httpOnly cookie that JavaScript cannot read at all;
-// the browser attaches it to /auth/refresh by itself.
 let accessToken: string | null = null;
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
-// Tokens from the old scheme stayed in localStorage; drop them on first load.
 localStorage.removeItem('access_token');
 localStorage.removeItem('refresh_token');
 
-// Every refresh rotates the refresh cookie, and presenting the same cookie
-// twice outside a short window counts as theft. Several requests failing with
-// 401 at once must therefore share one refresh instead of racing.
 let refreshInFlight: Promise<string | null> | null = null;
 
 export function refreshAccessToken(): Promise<string | null> {
@@ -74,7 +66,6 @@ export async function apiRequest<T = any>(
     credentials: 'same-origin',
   });
 
-  // Access token expired or its session was revoked: try one silent refresh
   if (response.status === 401 && !NO_RETRY_ENDPOINTS.some((e) => endpoint.startsWith(e))) {
     const fresh = await refreshAccessToken();
     if (fresh) {
@@ -103,13 +94,13 @@ export async function apiRequest<T = any>(
                 : '';
               let msg = item.msg || item.message || '';
               if (msg.includes('String should match pattern')) {
-                msg = 'Разрешены только латинские буквы, цифры, знаки _ и -';
+                msg = 'Недопустимые символы';
               } else if (msg.includes('String should have at least 8 characters')) {
                 msg = 'Минимум 8 символов';
               } else if (msg.includes('String should have at least 3 characters')) {
                 msg = 'Минимум 3 символа';
               } else if (msg.includes('valid email')) {
-                msg = 'Некорректный адрес email';
+                msg = 'Некорректный email';
               }
               return loc ? `${loc}: ${msg}` : msg;
             }

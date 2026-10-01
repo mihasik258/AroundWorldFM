@@ -19,7 +19,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [checkingStreams, setCheckingStreams] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  // New station state
   const [name, setName] = useState('');
   const [streamUrl, setStreamUrl] = useState('');
   const [country, setCountry] = useState('');
@@ -35,7 +34,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       const data = await apiRequest<SystemStats>('/admin/stats');
       setStats(data);
     } catch (err: any) {
-      setMessage({ text: err.message || 'Ошибка загрузки статистики', type: 'error' });
+      setMessage({ text: err.message || 'Ошибка загрузки', type: 'error' });
     } finally {
       setLoadingStats(false);
     }
@@ -52,10 +51,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setMessage(null);
     try {
       const res = await apiRequest('/admin/trigger-stream-check', { method: 'POST' });
-      setMessage({ text: res.message || 'Проверка стримов завершена', type: 'success' });
+      setMessage({ text: res.message || 'Проверка завершена', type: 'success' });
       fetchStats();
     } catch (err: any) {
-      setMessage({ text: err.message || 'Ошибка аудита потоков', type: 'error' });
+      setMessage({ text: err.message || 'Ошибка проверки', type: 'error' });
     } finally {
       setCheckingStreams(false);
     }
@@ -80,7 +79,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         }),
       });
 
-      setMessage({ text: `Станция '${name}' успешно добавлена!`, type: 'success' });
+      setMessage({ text: 'Станция добавлена', type: 'success' });
       setName('');
       setStreamUrl('');
       setCountry('');
@@ -91,7 +90,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       fetchStats();
       onStationAdded();
     } catch (err: any) {
-      setMessage({ text: err.message || 'Не удалось создать станцию', type: 'error' });
+      setMessage({ text: err.message || 'Ошибка', type: 'error' });
     } finally {
       setAddLoading(false);
     }
@@ -102,7 +101,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   return (
     <div className="modal-backdrop">
       <div className="glass-panel rounded-3xl p-6 sm:p-8 w-full max-w-xl relative shadow-2xl border border-slate-700/80 max-h-[90vh] flex flex-col">
-        {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute right-5 top-5 text-slate-400 hover:text-white p-1 rounded-lg bg-slate-800/60"
@@ -110,7 +108,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           <X className="w-5 h-5" />
         </button>
 
-        {/* Title */}
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
             <Shield className="w-5 h-5" />
@@ -121,7 +118,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           </div>
         </div>
 
-        {/* Status Message */}
         {message && (
           <div
             className={`mb-4 p-3 rounded-xl text-xs flex items-center gap-2 ${
@@ -140,7 +136,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         )}
 
         <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-6">
-          {/* Stats Grid */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
@@ -184,7 +179,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             )}
           </div>
 
-          {/* Add Station Form */}
           <div className="pt-4 border-t border-slate-800">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-1.5">
               <PlusCircle className="w-4 h-4 text-indigo-400" />

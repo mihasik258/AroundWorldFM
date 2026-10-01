@@ -10,7 +10,6 @@ interface NavbarProps {
   onOpenLanguages: () => void;
 }
 
-/** UTC is what actually drives the terminator, so it is the clock on show. */
 const useUtcClock = () => {
   const [time, setTime] = useState(() => new Date());
   useEffect(() => {

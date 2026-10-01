@@ -14,9 +14,6 @@ import { usePlayer } from './context/PlayerContext';
 export const App: React.FC = () => {
   const { currentStation, skipNext, currentVibe, excludedLanguages } = usePlayer();
 
-  // Stations of the current vibe, drawn as pins on the globe. Vibe membership
-  // is decided server-side (it matches on tags, not the mostly-empty `vibes`
-  // column), so the globe has to ask for the set rather than filter locally.
   const [stations, setStations] = useState<RadioStation[]>([]);
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -31,10 +28,9 @@ export const App: React.FC = () => {
     }
     apiRequest<RadioStation[]>(`/stations/vibe/stations?${params.toString()}`)
       .then((data) => setStations(data))
-      .catch((err) => console.error('Failed to load stations for globe', err));
+      .catch((err) => console.error('Failed to load stations', err));
   }, [currentVibe, excludedLanguages]);
 
-  // Tune the first station of the saved vibe once the catalogue is in
   useEffect(() => {
     if (!currentStation && stations.length > 0) {
       skipNext();
@@ -50,8 +46,6 @@ export const App: React.FC = () => {
         onOpenLanguages={() => setLangModalOpen(true)}
       />
 
-      {/* The planet, edge to edge, with the band rail resting over its left
-          margin on wide screens. */}
       <main className="stage">
         <Globe stations={stations} />
         <VibeBar />

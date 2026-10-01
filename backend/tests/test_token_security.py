@@ -23,7 +23,6 @@ async def test_refresh_rotates_token(client: AsyncClient, create_users):
     t2 = refresh_cookie(res)
     assert t2 and t2 != t1
 
-    # The new token keeps working, and the new access token is valid
     me = await client.get(f"{API}/users/me", headers=bearer(res))
     assert me.status_code == 200
     assert (await refresh(client, t2)).status_code == 200
@@ -31,7 +30,6 @@ async def test_refresh_rotates_token(client: AsyncClient, create_users):
 
 @pytest.mark.asyncio
 async def test_concurrent_refresh_within_grace_is_not_theft(client: AsyncClient, create_users):
-    """Two tabs refresh with the same token at once: the loser must not kill the session."""
     t1 = refresh_cookie(await login(client))
 
     winner = await refresh(client, t1)
@@ -39,7 +37,6 @@ async def test_concurrent_refresh_within_grace_is_not_theft(client: AsyncClient,
     loser = await refresh(client, t1)
 
     assert loser.status_code == 200
-    # No new cookie for the loser: the browser already has t2 from the winner
     assert refresh_cookie(loser) is None
     me = await client.get(f"{API}/users/me", headers=bearer(loser))
     assert me.status_code == 200
@@ -50,7 +47,6 @@ async def test_concurrent_refresh_within_grace_is_not_theft(client: AsyncClient,
 async def test_refresh_token_reuse_revokes_session(
     client: AsyncClient, create_users, monkeypatch
 ):
-    """A rotated token shown again after the grace window means it was copied."""
     monkeypatch.setattr(settings, "REFRESH_REUSE_GRACE_SECONDS", 0)
     login_res = await login(client)
     t1 = refresh_cookie(login_res)
@@ -58,9 +54,8 @@ async def test_refresh_token_reuse_revokes_session(
 
     stolen = await refresh(client, t1)
     assert stolen.status_code == 401
-    assert "повторное использование" in stolen.json()["detail"]
+    assert stolen.json()["detail"] == "Повторное использование токена"
 
-    # The whole session is dead: the legitimate token and access token too
     assert (await refresh(client, t2)).status_code == 401
     me = await client.get(f"{API}/users/me", headers=bearer(login_res))
     assert me.status_code == 401
@@ -74,9 +69,8 @@ async def test_revoked_session_blocks_access_token_immediately(client: AsyncClie
 
     revoke = await client.delete(f"{API}/auth/sessions/{session_id}", headers=headers)
     assert revoke.status_code == 200
-    assert _cookie_cleared(revoke)  # revoking the current session is a logout
+    assert _cookie_cleared(revoke)
 
-    # The access token is still unexpired, but its session is gone
     me = await client.get(f"{API}/users/me", headers=headers)
     assert me.status_code == 401
 
@@ -136,7 +130,6 @@ async def test_refresh_without_cookie_fails(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_access_token_must_match_its_session(client: AsyncClient, create_users):
-    """A token with no sid, or with another user's session id, is rejected."""
     admin_login = await login(client, "adminuser", "AdminPassword123!")
     admin_sid = jwt.decode(
         admin_login.json()["access_token"], settings.SECRET_KEY, algorithms=[settings.ALGORITHM]

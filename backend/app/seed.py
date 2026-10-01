@@ -5,10 +5,10 @@ from app.services.seed_service import seed_initial_data
 
 
 async def main():
-    print("Seeding database with demo users and radio stations...")
+    print("Seeding")
     async with AsyncSessionLocal() as db:
         await seed_initial_data(db)
-    print("Database seeding completed successfully!")
+    print("Done")
 
 
 if __name__ == "__main__":

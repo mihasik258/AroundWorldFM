@@ -1,8 +1,6 @@
 import React from 'react';
 import { usePlayer } from '../context/PlayerContext';
 
-// A vibe behaves like a band on a receiver, so it is presented as one: a name
-// and a lamp, no icon and no colour of its own. The planet carries the colour.
 const VIBES = [
   { id: 'focus', label: 'Фокус' },
   { id: 'night_drive', label: 'Драйв' },

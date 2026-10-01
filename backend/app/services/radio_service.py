@@ -11,11 +11,6 @@ from app.schemas.station import StationQuery, StationRead, StationStreamRead
 
 
 def csv_key(value: str | list[str] | None) -> tuple[str, ...]:
-    """Normalises a comma-separated filter into a canonical cache-key tuple.
-
-    Case, spacing, order and duplicates do not change the query result, so
-    "Rock, jazz" and "jazz,rock" share one cache entry.
-    """
     items = value.split(",") if isinstance(value, str) else (value or [])
     return tuple(sorted({i.strip().lower() for i in items if i and i.strip()}))
 
@@ -72,7 +67,6 @@ class RadioService:
         query_params: StationQuery,
         only_active: bool = True,
     ) -> list[StationRead]:
-        """Fetches stations matching filters (genres, languages, country, search)."""
         genres = () if (query_params.genres or "").strip().lower() == "any" else csv_key(query_params.genres)
         languages = csv_key(query_params.languages)
         country = (query_params.country or "").strip().lower()
@@ -95,7 +89,6 @@ class RadioService:
             if languages:
                 stmt = stmt.where(or_(*[Station.language.ilike(f"%{lang}%") for lang in languages]))
             if genres:
-                # array overlap, served by the GIN index on tags
                 stmt = stmt.where(Station.tags.overlap(list(genres)))
             if search:
                 pattern = f"%{search}%"
@@ -113,7 +106,6 @@ class RadioService:
         genres: str | None = None,
         languages: str | None = None,
     ) -> StationRead | None:
-        """Returns a single random active station matching criteria."""
         genre_list = () if (genres or "").strip().lower() == "any" else csv_key(genres)
         lang_list = csv_key(languages)
 
@@ -130,7 +122,6 @@ class RadioService:
                 stmt = stmt.where(Station.tags.overlap(list(genre_list)))
             return list((await db.execute(stmt)).scalars().all())
 
-        # The candidate pool is cached; only the one chosen station is loaded
         all_ids = await catalog_cache.get_or_set(("random_ids", genre_list, lang_list), load_ids)
         if not all_ids:
             return None
@@ -146,8 +137,6 @@ class RadioService:
 
     @staticmethod
     async def get_available_genres(db: AsyncSession) -> list[str]:
-        """Returns distinct sorted genres/tags from stations using PostgreSQL unnest."""
-
         async def load() -> list[str]:
             res = await db.execute(select(func.unnest(Station.tags)).distinct())
             return sorted({t.lower() for t in res.scalars().all() if t})
@@ -156,8 +145,6 @@ class RadioService:
 
     @staticmethod
     async def get_available_languages(db: AsyncSession) -> list[str]:
-        """Returns distinct sorted languages from active stations."""
-
         async def load() -> list[str]:
             stmt = (
                 select(Station.language)
@@ -177,7 +164,6 @@ class RadioService:
 
     @classmethod
     async def get_user_favorites(cls, db: AsyncSession, user_id: int) -> list[StationRead]:
-        """Returns list of stations favorited by a user."""
         stmt = (
             select(Favorite)
             .options(
@@ -194,7 +180,6 @@ class RadioService:
 
     @classmethod
     async def add_favorite(cls, db: AsyncSession, user_id: int, station_id: int) -> bool:
-        """Adds station to user's favorites if not already present."""
         stmt = select(Favorite).where(
             Favorite.user_id == user_id, Favorite.station_id == station_id
         )
@@ -209,7 +194,6 @@ class RadioService:
 
     @classmethod
     async def remove_favorite(cls, db: AsyncSession, user_id: int, station_id: int) -> bool:
-        """Removes station from user's favorites."""
         stmt = select(Favorite).where(
             Favorite.user_id == user_id, Favorite.station_id == station_id
         )

@@ -16,14 +16,6 @@ from app.services.stream_checker import run_stream_health_check
 
 
 async def _reload_station_with_streams(db: AsyncSession, station_id: int) -> Station:
-    """Re-fetches a station with streams+health eagerly loaded.
-
-    plain db.refresh() only reloads the station's own columns and the
-    top-level `streams` collection — it does not cascade into the nested
-    `streams[].health` relationship, so a later synchronous access to
-    `.health` in _station_to_read() can trigger a lazy load outside the
-    async greenlet and crash with MissingGreenlet.
-    """
     stmt = (
         select(Station)
         .options(selectinload(Station.streams).selectinload(StationStream.health))
@@ -34,12 +26,12 @@ async def _reload_station_with_streams(db: AsyncSession, station_id: int) -> Sta
 
 router = APIRouter(
     prefix="/admin",
-    tags=["Панель администратора (RBAC)"],
+    tags=["Администрирование"],
     dependencies=[Depends(require_role([UserRole.ADMIN]))],
 )
 
 
-@router.get("/stats", summary="Системная статистика сервиса (только для роли ADMIN)")
+@router.get("/stats", summary="Статистика")
 async def get_system_stats(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     total_users = (await db.execute(select(func.count(User.id)))).scalar() or 0
     total_stations = (await db.execute(select(func.count(Station.id)))).scalar() or 0
@@ -71,18 +63,17 @@ async def get_system_stats(db: AsyncSession = Depends(get_db)) -> dict[str, Any]
     "/stations",
     response_model=StationRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Добавить новую радиостанцию",
+    summary="Создать станцию",
 )
 async def create_station(
     station_in: StationCreate,
     db: AsyncSession = Depends(get_db),
 ):
-    # Check if stream_url already exists in station_streams
     stmt = select(StationStream).where(StationStream.stream_url == station_in.stream_url)
     if (await db.execute(stmt)).scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Станция с таким URL потока уже существует",
+            detail="URL потока уже занят",
         )
 
     station = Station(
@@ -118,7 +109,7 @@ async def create_station(
 
 
 @router.patch(
-    "/stations/{station_id}", response_model=StationRead, summary="Обновить параметры радиостанции"
+    "/stations/{station_id}", response_model=StationRead, summary="Обновить станцию"
 )
 async def update_station(
     station_id: int,
@@ -130,8 +121,6 @@ async def update_station(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Станция не найдена")
 
     update_data = station_in.model_dump(exclude_unset=True)
-    # stream_url belongs to station_streams, not stations — must be applied to the
-    # primary stream explicitly, plain setattr() on Station would silently no-op.
     new_stream_url = update_data.pop("stream_url", None)
 
     for field, value in update_data.items():
@@ -147,7 +136,7 @@ async def update_station(
             if (await db.execute(dup_stmt)).scalar_one_or_none():
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Станция с таким URL потока уже существует",
+                    detail="URL потока уже занят",
                 )
             primary.stream_url = new_stream_url
 
@@ -157,7 +146,7 @@ async def update_station(
     return RadioService._station_to_read(station)
 
 
-@router.delete("/stations/{station_id}", summary="Удалить радиостанцию")
+@router.delete("/stations/{station_id}", summary="Удалить станцию")
 async def delete_station(station_id: int, db: AsyncSession = Depends(get_db)):
     station = await db.get(Station, station_id)
     if not station:
@@ -166,10 +155,10 @@ async def delete_station(station_id: int, db: AsyncSession = Depends(get_db)):
     await db.delete(station)
     await db.commit()
     catalog_cache.clear()
-    return {"status": "ok", "message": f"Станция '{station.name}' успешно удалена"}
+    return {"status": "ok", "message": "Станция удалена"}
 
 
-@router.post("/trigger-stream-check", summary="Принудительный запуск проверки доступности потоков")
+@router.post("/trigger-stream-check", summary="Проверить потоки")
 async def trigger_stream_check(db: AsyncSession = Depends(get_db)):
     await run_stream_health_check(db)
-    return {"status": "ok", "message": "Проверка доступности потоков успешно завершена"}
+    return {"status": "ok", "message": "Проверка завершена"}

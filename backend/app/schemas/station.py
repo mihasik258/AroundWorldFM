@@ -4,7 +4,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def _normalize_tags(v: list[str] | str | None) -> list[str]:
-    """Accepts either a comma-separated string or a list and returns a clean list[str]."""
     if v is None:
         return []
     if isinstance(v, str):
@@ -79,8 +78,8 @@ class StationRead(StationBase):
 
 
 class StationQuery(BaseModel):
-    genres: str | None = Field(None, description="Comma-separated genres, e.g. jazz,rock")
-    languages: str | None = Field(None, description="Comma-separated allowed languages")
+    genres: str | None = Field(None, description="Genres")
+    languages: str | None = Field(None, description="Languages")
     country: str | None = None
     search: str | None = None
     limit: int = Field(50, ge=1, le=200)

@@ -28,15 +28,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
     if (isRegister) {
       if (cleanUsername.length < 3) {
-        setError('Имя пользователя должно быть не короче 3 символов');
+        setError('Имя пользователя короче 3 символов');
         return;
       }
       if (!/^[a-zA-Z0-9_-]+$/.test(cleanUsername)) {
-        setError('Имя пользователя может содержать только латинские буквы (a-z), цифры, _ и - (без пробелов и кириллицы)');
+        setError('Недопустимые символы в имени пользователя');
         return;
       }
       if (password.length < 8) {
-        setError('Пароль должен содержать минимум 8 символов');
+        setError('Пароль короче 8 символов');
         return;
       }
     }
@@ -51,7 +51,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       }
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Ошибка аутентификации');
+      setError(err.message || 'Ошибка входа');
     } finally {
       setLoading(false);
     }
@@ -72,7 +72,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   return (
     <div className="modal-backdrop">
       <div className="glass-panel rounded-3xl p-6 sm:p-8 w-full max-w-md relative shadow-2xl border border-slate-700/80 animate-in fade-in zoom-in-95 duration-200">
-        {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute right-5 top-5 text-slate-400 hover:text-white p-1 rounded-lg bg-slate-800/60"
@@ -80,7 +79,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           <X className="w-5 h-5" />
         </button>
 
-        {/* Title */}
         <div className="text-center mb-6">
           <h2 className="text-2xl font-black text-white tracking-tight">
             {isRegister ? 'Регистрация' : 'Вход в аккаунт'}
@@ -90,7 +88,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           </p>
         </div>
 
-        {/* Error Alert */}
         {error && (
           <div className="mb-4 p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -98,7 +95,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           </div>
         )}
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
           {isRegister && (
             <div>
@@ -172,7 +168,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           </button>
         </form>
 
-        {/* Demo Accounts Quick-Fill */}
         <div className="mt-5 pt-4 border-t border-slate-800 text-center">
           <div className="text-[11px] text-slate-400 mb-2">Демо-вход в один клик:</div>
           <div className="flex items-center justify-center gap-2">
@@ -193,7 +188,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        {/* Toggle Mode */}
         <div className="mt-4 text-center">
           <button
             type="button"

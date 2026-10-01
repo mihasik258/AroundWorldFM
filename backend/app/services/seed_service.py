@@ -11,7 +11,6 @@ from app.models.user import User, UserRole
 logger = logging.getLogger(__name__)
 
 INITIAL_STATIONS = [
-    # France
     {
         "name": "FIP Radio",
         "stream_url": "https://icecast.radiofrance.fr/fip-midfi.mp3",
@@ -51,7 +50,6 @@ INITIAL_STATIONS = [
         "codec": "MP3",
         "bitrate": 128,
     },
-    # United Kingdom
     {
         "name": "BBC Radio 1",
         "stream_url": "https://stream.live.vc.bbcmedia.co.uk/bbc_radio_one",
@@ -91,7 +89,6 @@ INITIAL_STATIONS = [
         "codec": "MP3",
         "bitrate": 128,
     },
-    # Germany
     {
         "name": "FluxFM Berlin",
         "stream_url": "https://fluxfm.streamabc.net/flx-fluxfmberlin-mp3-320-8025247",
@@ -118,7 +115,6 @@ INITIAL_STATIONS = [
         "codec": "MP3",
         "bitrate": 192,
     },
-    # USA
     {
         "name": "KEXP 90.3 FM Seattle",
         "stream_url": "https://kexp.streamguys1.com/kexp128.mp3",
@@ -158,7 +154,6 @@ INITIAL_STATIONS = [
         "codec": "MP3",
         "bitrate": 128,
     },
-    # Japan
     {
         "name": "Shonan Beach FM 78.9",
         "stream_url": "https://beachfm.out.airtime.pro/beachfm_a",
@@ -185,7 +180,6 @@ INITIAL_STATIONS = [
         "codec": "MP3",
         "bitrate": 128,
     },
-    # Brazil
     {
         "name": "Radio Nova Brasil FM",
         "stream_url": "https://ice.fabricahost.com.br/novabrasilsp",
@@ -199,7 +193,6 @@ INITIAL_STATIONS = [
         "codec": "MP3",
         "bitrate": 128,
     },
-    # Spain
     {
         "name": "Radio 3 RNE",
         "stream_url": "https://rtvelivestream.akamaized.net/rne_r3_main.mp3",
@@ -226,7 +219,6 @@ INITIAL_STATIONS = [
         "codec": "MP3",
         "bitrate": 128,
     },
-    # Italy
     {
         "name": "Rai Radio 3 Classica",
         "stream_url": "https://icstream.rai.it/11.mp3",
@@ -243,12 +235,7 @@ INITIAL_STATIONS = [
 ]
 
 
-
-
-
 async def seed_initial_data(db: AsyncSession) -> None:
-    """Populates database with initial admin user, identities, and curated radio stations."""
-    # 1. Seed Admin & Test User if missing
     admin_stmt = select(User).where(User.username == "admin")
     res = await db.execute(admin_stmt)
     if not res.scalar_one_or_none():
@@ -281,9 +268,8 @@ async def seed_initial_data(db: AsyncSession) -> None:
         )
         db.add_all([admin_id, test_id])
         await db.commit()
-        logger.info("Admin ('admin') and demo user ('listener') created successfully.")
+        logger.info("Demo users created")
 
-    # 2. Seed Stations if table is empty
     count_stmt = select(func.count(Station.id))
     count = (await db.execute(count_stmt)).scalar() or 0
     if count == 0:
@@ -296,7 +282,7 @@ async def seed_initial_data(db: AsyncSession) -> None:
             try:
                 with open(data_file, encoding="utf-8") as f:
                     raw_stations = json.load(f)
-                logger.info(f"Loaded {len(raw_stations)} curated stations from {data_file.name}")
+                logger.info(f"Loaded {len(raw_stations)} stations")
             except Exception as e:
                 logger.error(f"Failed to load {data_file}: {e}")
 
@@ -304,7 +290,6 @@ async def seed_initial_data(db: AsyncSession) -> None:
             raw_stations = INITIAL_STATIONS
 
         for item in raw_stations:
-            # Parse tags to list of lowercase strings
             raw_tags = item.get("tags") or ""
             if isinstance(raw_tags, str):
                 tag_list = [t.strip().lower() for t in raw_tags.split(",") if t.strip()]
@@ -346,4 +331,4 @@ async def seed_initial_data(db: AsyncSession) -> None:
             db.add(health)
 
         await db.commit()
-        logger.info(f"Seeded {len(raw_stations)} stations into database.")
+        logger.info(f"Seeded {len(raw_stations)} stations")

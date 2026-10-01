@@ -14,16 +14,11 @@ UTC = timezone.utc
 logger = logging.getLogger(__name__)
 
 
-# Only network-level failures mean "this stream is down". Anything else (a bug in
-# our own code, a missing setting) must propagate instead of silently marking every
-# stream as dead — that once wiped the whole catalogue in two check runs.
 STREAM_ERRORS = (httpx.HTTPError, asyncio.TimeoutError, OSError, ValueError)
 
 
 async def check_single_stream(client: httpx.AsyncClient, stream_url: str) -> bool:
-    """Tests if an audio stream URL is alive and responding with audio data."""
     try:
-        # Try HEAD first
         try:
             resp = await client.head(
                 stream_url, timeout=settings.STREAM_CHECK_TIMEOUT_SECONDS, follow_redirects=True
@@ -33,12 +28,10 @@ async def check_single_stream(client: httpx.AsyncClient, stream_url: str) -> boo
         except STREAM_ERRORS:
             pass
 
-        # If HEAD fails or is disallowed by stream server, test with partial streaming GET
         async with client.stream(
             "GET", stream_url, timeout=settings.STREAM_CHECK_TIMEOUT_SECONDS, follow_redirects=True
         ) as resp:
             if resp.status_code in (200, 206):
-                # Read initial small chunk to confirm stream transmits data
                 async for _ in resp.aiter_bytes(chunk_size=512):
                     return True
         return False
@@ -52,7 +45,6 @@ async def check_and_update_stream(
     stream: StationStream,
     db: AsyncSession,
 ) -> tuple[int, bool]:
-    """Checks one station stream with concurrency limit and updates StreamHealth in DB."""
     async with semaphore:
         start_t = asyncio.get_event_loop().time()
         is_alive = await check_single_stream(client, stream.stream_url)
@@ -72,14 +64,11 @@ async def check_and_update_stream(
             health.check_fail_count += 1
             if health.check_fail_count >= 2:
                 health.is_active = False
-                logger.warning(
-                    f"Stream '{stream.stream_url}' marked inactive (fails: {health.check_fail_count})"
-                )
+                logger.warning(f"Stream inactive: {stream.stream_url}")
         return stream.id, is_alive
 
 
 async def run_stream_health_check(db: AsyncSession) -> None:
-    """Runs a full sweep over all station streams, updating StreamHealth."""
     from sqlalchemy.orm import selectinload
 
     stmt = select(StationStream).options(selectinload(StationStream.health))
@@ -89,8 +78,8 @@ async def run_stream_health_check(db: AsyncSession) -> None:
     if not streams:
         return
 
-    logger.info(f"Starting stream health check for {len(streams)} streams...")
-    semaphore = asyncio.Semaphore(10)  # Max 10 concurrent requests
+    logger.info(f"Checking {len(streams)} streams")
+    semaphore = asyncio.Semaphore(10)
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; AroundFM-HealthCheck/2.0)",
         "Icy-MetaData": "1",
@@ -101,16 +90,11 @@ async def run_stream_health_check(db: AsyncSession) -> None:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
     await db.commit()
-    # Availability decides which stations the public catalogue shows
     catalog_cache.clear()
 
     errors = [r for r in results if isinstance(r, BaseException)]
     if errors:
-        # Surface unexpected failures instead of letting them look like dead streams
-        logger.error(
-            f"Health check hit {len(errors)} unexpected errors, first one: "
-            f"{type(errors[0]).__name__}: {errors[0]}"
-        )
+        logger.error(f"Health check errors: {len(errors)}, first: {errors[0]!r}")
 
     alive_count = sum(1 for r in results if isinstance(r, tuple) and r[1])
-    logger.info(f"Health check finished: {alive_count}/{len(streams)} streams active.")
+    logger.info(f"Active streams: {alive_count}/{len(streams)}")

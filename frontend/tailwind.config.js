@@ -1,9 +1,3 @@
-/** @type {import('tailwindcss').Config} */
-
-
-// The receiver palette. `slate` and `indigo` are deliberately remapped onto it so
-// that existing utility-class markup (the modals) picks up the new design without
-// a rewrite: bg-slate-900 becomes recessed panel, indigo becomes the dial lamp.
 const void_ = '#070a10';
 const bone = '#e8e3d8';
 const lamp = '#ffb347';
@@ -53,7 +47,6 @@ export default {
         mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
       },
 
-      // Flattened radii: an instrument panel has tight corners, not bubbles.
       borderRadius: {
         lg: '5px',
         xl: '6px',

@@ -14,7 +14,6 @@ from tests.helpers import API, bearer, login
 
 @pytest.fixture
 def bcrypt_calls(monkeypatch):
-    """Records every bcrypt verification and the thread it ran on."""
     calls = []
     real = security.verify_password
 
@@ -45,7 +44,6 @@ async def test_bcrypt_runs_off_the_event_loop(client: AsyncClient, create_users,
 async def test_failed_logins_are_indistinguishable(
     client: AsyncClient, create_users, db_session, bcrypt_calls
 ):
-    """Unknown login, account without password, wrong password: same text, same bcrypt work."""
     no_password = User(username="tguser", email="tg@example.com", role=UserRole.USER)
     db_session.add(no_password)
     await db_session.flush()
@@ -63,7 +61,6 @@ async def test_failed_logins_are_indistinguishable(
 
 @pytest.mark.asyncio
 async def test_unknown_vibe_is_rejected(client: AsyncClient):
-    """An unknown vibe used to skip the genre filter and return the whole catalogue."""
     assert (await client.get(f"{API}/stations/vibe/stations?vibe=anything")).status_code == 422
     assert (await client.get(f"{API}/stations/vibe/next?vibe=anything")).status_code == 422
     assert (await client.get(f"{API}/stations/vibe/stations?vibe=coffee")).status_code == 200
@@ -97,8 +94,6 @@ async def test_vibe_catalogue_is_cached_and_invalidated(
     url = f"{API}/stations/vibe/stations?vibe=coffee&exclude_languages=French, german"
 
     assert (await client.get(url)).json() == []
-    # Order, case and spacing of the languages do not matter: same cache entry.
-    # vibe/next reads the same pool (404 here only because the pool is empty).
     await client.get(f"{API}/stations/vibe/stations?vibe=coffee&exclude_languages=german,french")
     await client.get(f"{API}/stations/vibe/next?vibe=coffee&exclude_languages=GERMAN,French")
     assert len(built) == 1
@@ -112,7 +107,6 @@ async def test_vibe_catalogue_is_cached_and_invalidated(
     )
     assert created.status_code == 201
 
-    # The admin change dropped the cache: the new station is visible at once
     names = [s["name"] for s in (await client.get(url)).json()]
     assert names == ["Jazz Cafe"]
     assert len(built) == 2
@@ -143,20 +137,19 @@ async def test_cache_expiry_and_eviction():
 
     await cache.get_or_set("a", lambda: const(1))
     await asyncio.sleep(0.06)
-    assert await cache.get_or_set("a", lambda: const(2)) == 2  # expired, recomputed
+    assert await cache.get_or_set("a", lambda: const(2)) == 2
 
     await cache.get_or_set("b", lambda: const(3))
-    await cache.get_or_set("c", lambda: const(4))  # evicts "a", the oldest
+    await cache.get_or_set("c", lambda: const(4))
     assert await cache.get_or_set("a", lambda: const(5)) == 5
 
 
 @pytest.mark.asyncio
 async def test_cache_does_not_store_value_computed_before_clear():
-    """A read that raced an update must not put stale data back for a whole TTL."""
     cache = TTLCache(ttl=60, max_entries=10)
 
     async def stale():
-        cache.clear()  # an admin edit lands while this value is being computed
+        cache.clear()
         return "stale"
 
     async def fresh():

@@ -2,12 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ========================================================================
-   Around FM — "Приёмник"
-   The planet is the tuning dial. The screen centre is the needle.
-   Only the globe carries colour; the panel around it is bone on void.
-   ===================================================================== */
-
 :root {
   --void: #070a10;
   --deep: #0c1018;
@@ -95,18 +89,11 @@ select {
   display: none;
 }
 
-/* --- numerals -------------------------------------------------------- */
-/* Mono is reserved for instrument readouts: clocks, coordinates, countdowns.
-   Never for labels. */
 .num {
   font-family: var(--f-num);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
-
-/* ========================================================================
-   Shell
-   ===================================================================== */
 
 .shell {
   display: grid;
@@ -114,16 +101,11 @@ select {
   height: 100dvh;
   width: 100%;
 
-  /* Not flat black: a cold halo sits behind the planet and a thin warm wash
-     rises off the console, so the two colours of the app (signal amber, night
-     cyan) are present even before the globe loads. */
   background:
     radial-gradient(115% 62% at 50% 40%, rgba(46, 120, 152, 0.20), transparent 62%),
     radial-gradient(90% 45% at 50% 104%, rgba(255, 179, 71, 0.07), transparent 70%),
     linear-gradient(180deg, #070c16 0%, #04070d 62%, #03050a 100%);
 }
-
-/* --- top rail --------------------------------------------------------- */
 
 .rail {
   display: flex;
@@ -158,7 +140,6 @@ select {
   padding-right: 6px;
 }
 
-/* Quiet text button used across the rail */
 .ghost {
   display: inline-flex;
   align-items: center;
@@ -181,16 +162,9 @@ select {
   color: var(--lamp);
 }
 
-/* ========================================================================
-   Stage — the planet, edge to edge
-   ===================================================================== */
-
 .stage {
   position: relative;
   overflow: hidden;
-  /* Both axes must be allowed to shrink: a grid item defaults to min-*:auto,
-     and the WebGL canvas carries inline pixel sizes that would otherwise
-     inflate the whole shell when the window gets smaller. */
   min-width: 0;
   min-height: 0;
 }
@@ -202,8 +176,6 @@ select {
   touch-action: none;
 }
 
-/* three.js writes width/height inline on the canvas; the box must still follow
-   the container, and the drawing buffer is resized separately on resize. */
 .stage-canvas > canvas {
   display: block;
   width: 100% !important;
@@ -213,10 +185,6 @@ select {
 .stage-canvas:active {
   cursor: grabbing;
 }
-
-/* --- the needle ------------------------------------------------------- */
-/* A fixed reticle at dead centre. Spinning moves the Earth under it, which
-   is what makes the globe legible as a tuning dial without a tooltip. */
 
 .needle {
   position: absolute;
@@ -253,10 +221,6 @@ select {
 .needle.is-tuning .needle-bracket {
   stroke: var(--lamp);
 }
-
-/* --- band selector ---------------------------------------------------- */
-/* A vibe is a band on a receiver, so it reads as a dial scale: a tick, a
-   name, and a lamp on the one that is lit. */
 
 .bands {
   position: absolute;
@@ -310,8 +274,6 @@ select {
 }
 
 @media (min-width: 900px) {
-  /* On a wide screen the rail stands vertically at the left edge of the
-     stage, the way a band switch sits beside a dial. */
   .bands {
     top: 50%;
     right: auto;
@@ -329,18 +291,12 @@ select {
   }
 }
 
-/* ========================================================================
-   Console — station readout and transport
-   ===================================================================== */
-
 .console {
   position: relative;
   padding: 16px 18px 18px;
   z-index: 10;
 }
 
-/* The rotation timer IS the divider between stage and console: the hairline
-   depletes over the five minutes rather than sitting there as decoration. */
 .rotation-track {
   position: absolute;
   top: 0;
@@ -419,7 +375,6 @@ select {
   text-overflow: ellipsis;
 }
 
-/* Meta reads as an instrument row: values separated by rules, not bullets. */
 .meta {
   display: flex;
   align-items: center;
@@ -444,8 +399,6 @@ select {
   flex: none;
 }
 
-/* Narrow screens wrap the readout onto two lines, which strands a rule at the
-   end of a line. Space alone separates the values there. */
 @media (max-width: 639px) {
   .meta {
     gap: 14px;
@@ -493,8 +446,6 @@ select {
   border-color: var(--bone);
 }
 
-/* --- transport -------------------------------------------------------- */
-
 .transport {
   display: flex;
   align-items: center;
@@ -533,7 +484,6 @@ select {
   color: var(--lamp);
 }
 
-/* The single ringed control: play. Everything else is a bare glyph. */
 .key-play {
   width: 46px;
   height: 46px;
@@ -549,8 +499,6 @@ select {
   color: var(--lamp);
   background: none;
 }
-
-/* --- volume ----------------------------------------------------------- */
 
 .volume {
   display: flex;
@@ -596,8 +544,6 @@ select {
   border: none;
   border-radius: 0;
 }
-
-/* --- states ----------------------------------------------------------- */
 
 .alert {
   display: flex;
@@ -661,10 +607,6 @@ select {
     font-size: 32px;
   }
 }
-
-/* ========================================================================
-   Shared chrome for the modal surfaces
-   ===================================================================== */
 
 .modal-backdrop {
   position: fixed;
@@ -739,10 +681,6 @@ select {
   box-shadow: 0 0 8px rgba(255, 179, 71, 0.8);
   animation: breathe 3.4s ease-in-out infinite;
 }
-
-/* ========================================================================
-   Motion: one orchestrated arrival, nothing else uninvited
-   ===================================================================== */
 
 @keyframes rise {
   from {

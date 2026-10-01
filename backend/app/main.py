@@ -26,28 +26,24 @@ logger = logging.getLogger("aroundfm")
 
 
 async def periodic_session_cleanup():
-    """Purges expired and revoked sessions so user_sessions does not grow forever."""
     while True:
         try:
             async with AsyncSessionLocal() as db:
                 removed = await AuthService.cleanup_sessions(db)
             if removed:
-                logger.info(f"Session cleanup: removed {removed} expired/revoked sessions")
+                logger.info(f"Removed {removed} sessions")
         except Exception as e:
-            logger.error(f"Session cleanup failed: {type(e).__name__}: {e}")
+            logger.error(f"Session cleanup failed: {e}")
         await asyncio.sleep(settings.SESSION_CLEANUP_INTERVAL_SECONDS)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager for database initialization and cleanup."""
-    logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}...")
+    logger.info(f"Starting {settings.PROJECT_NAME} {settings.VERSION}")
 
-    # Create tables in PostgreSQL
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Seed initial users and curated radio stations
     async with AsyncSessionLocal() as db:
         await seed_initial_data(db)
 
@@ -55,14 +51,14 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    logger.info("Shutting down...")
+    logger.info("Shutting down")
     cleanup_task.cancel()
     try:
         await cleanup_task
     except asyncio.CancelledError:
         pass
     await engine.dispose()
-    logger.info("Database engine disposed. Shutdown complete.")
+    logger.info("Shutdown complete")
 
 
 app = FastAPI(
@@ -88,14 +84,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         msg = err.get("msg", "")
 
         if "string_pattern_mismatch" in err_type and field == "username":
-            friendly = "Имя пользователя может содержать только латинские буквы, цифры, '_' и '-'"
+            friendly = "Недопустимые символы в имени пользователя"
         elif "string_too_short" in err_type and field == "password":
             min_l = err.get("ctx", {}).get("min_length", 8)
-            friendly = f"Пароль должен содержать минимум {min_l} символов"
+            friendly = f"Пароль короче {min_l} символов"
         elif "string_too_short" in err_type and field == "username":
-            friendly = "Имя пользователя должно быть не короче 3 символов"
+            friendly = "Имя пользователя короче 3 символов"
         elif "value_error" in err_type and "email" in field:
-            friendly = "Некорректный адрес электронной почты"
+            friendly = "Некорректный email"
         else:
             friendly = f"{field}: {msg}" if field else msg
         errors.append(friendly)
@@ -116,7 +112,7 @@ app.add_middleware(
 )
 
 
-@app.get("/health", tags=["Система"], summary="Проверка состояния сервера")
+@app.get("/health", tags=["Система"], summary="Состояние сервера")
 async def health_check():
     try:
         async with AsyncSessionLocal() as db:

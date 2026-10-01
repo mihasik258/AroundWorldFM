@@ -20,13 +20,10 @@ async def login(
 
 
 def refresh_cookie(res: Response) -> str | None:
-    """The refresh token set by a response, or None if it set no new cookie."""
     return res.cookies.get(settings.REFRESH_COOKIE_NAME)
 
 
 def cookie_header(refresh_token: str) -> dict[str, str]:
-    # The cookie is Secure and the test client talks plain http, so the cookie
-    # jar would never send it — pass it explicitly, the way a browser would.
     return {"Cookie": f"{settings.REFRESH_COOKIE_NAME}={refresh_token}"}
 
 

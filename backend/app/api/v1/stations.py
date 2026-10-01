@@ -11,11 +11,8 @@ from app.services.now_playing_service import NowPlayingService
 from app.services.radio_service import RadioService
 from app.services.vibe_service import VIBE_LABELS, VIBE_PATTERN, VibeService
 
-router = APIRouter(prefix="/stations", tags=["Радиостанции и избранное"])
+router = APIRouter(prefix="/stations", tags=["Станции"])
 
-# Every excluded language adds an SQL condition; this only rejects abusive
-# requests. The catalogue has ~110 languages and the UI lets a user exclude
-# them one by one, so the cap must stay above that.
 MAX_EXCLUDED_LANGUAGES = 200
 
 
@@ -26,7 +23,7 @@ def parse_excluded_languages(raw: str | None) -> list[str] | None:
     if len(langs) > MAX_EXCLUDED_LANGUAGES:
         raise HTTPException(
             status_code=422,
-            detail=f"Можно исключить не более {MAX_EXCLUDED_LANGUAGES} языков",
+            detail="Слишком много языков",
         )
     return langs
 
@@ -34,12 +31,12 @@ def parse_excluded_languages(raw: str | None) -> list[str] | None:
 @router.get(
     "/vibe/next",
     response_model=StationRead,
-    summary="Получить следующую радиостанцию по выбранному вайбу с исключением языков",
+    summary="Следующая станция",
 )
 async def get_next_vibe_station(
-    vibe: str = Query("focus", pattern=VIBE_PATTERN, description="Выбранный вайб (focus, night_drive, coffee, party, sunset, world_odyssey)"),
-    exclude_languages: str | None = Query(None, description="Список исключаемых языков через запятую"),
-    exclude_ids: str | None = Query(None, description="Список ID недавно прослушанных станций через запятую"),
+    vibe: str = Query("focus", pattern=VIBE_PATTERN, description="Вайб"),
+    exclude_languages: str | None = Query(None, description="Исключаемые языки"),
+    exclude_ids: str | None = Query(None, description="Исключаемые ID"),
     db: AsyncSession = Depends(get_db),
 ):
     clean_exclude_langs = parse_excluded_languages(exclude_languages)
@@ -54,7 +51,7 @@ async def get_next_vibe_station(
     if not station:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Не найдено доступных станций для заданного вайба",
+            detail="Станции не найдены",
         )
     return station
 
@@ -62,11 +59,11 @@ async def get_next_vibe_station(
 @router.get(
     "/vibe/stations",
     response_model=list[StationRead],
-    summary="Все станции выбранного вайба с координатами (для глобуса)",
+    summary="Станции вайба",
 )
 async def get_vibe_stations(
-    vibe: str = Query("focus", pattern=VIBE_PATTERN, description="Выбранный вайб (focus, night_drive, coffee, party, sunset, world_odyssey)"),
-    exclude_languages: str | None = Query(None, description="Список исключаемых языков через запятую"),
+    vibe: str = Query("focus", pattern=VIBE_PATTERN, description="Вайб"),
+    exclude_languages: str | None = Query(None, description="Исключаемые языки"),
     db: AsyncSession = Depends(get_db),
 ):
     clean_exclude_langs = parse_excluded_languages(exclude_languages)
@@ -79,7 +76,7 @@ async def get_vibe_stations(
 
 @router.get(
     "/vibe/languages",
-    summary="Список всех доступных языков вещания с количеством станций",
+    summary="Языки с числом станций",
 )
 async def get_available_languages(db: AsyncSession = Depends(get_db)):
     return await VibeService.get_available_languages(db)
@@ -87,7 +84,7 @@ async def get_available_languages(db: AsyncSession = Depends(get_db)):
 
 @router.get(
     "/vibe/list",
-    summary="Список поддерживаемых вайбов",
+    summary="Вайбы",
 )
 async def get_supported_vibes():
     return [
@@ -98,13 +95,13 @@ async def get_supported_vibes():
 @router.get(
     "",
     response_model=list[StationRead],
-    summary="Получение списка радиостанций с фильтрацией (жанры, языки, страна, поиск)",
+    summary="Станции",
 )
 async def list_stations(
-    genres: str | None = Query(None, description="Список жанров через запятую"),
-    languages: str | None = Query(None, description="Список языков через запятую"),
+    genres: str | None = Query(None, description="Жанры"),
+    languages: str | None = Query(None, description="Языки"),
     country: str | None = Query(None, description="Страна"),
-    search: str | None = Query(None, description="Поисковый запрос"),
+    search: str | None = Query(None, description="Поиск"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
@@ -123,18 +120,18 @@ async def list_stations(
 @router.get(
     "/random",
     response_model=StationRead,
-    summary="Получение случайной работающей радиостанции по фильтрам",
+    summary="Случайная станция",
 )
 async def get_random_station(
-    genres: str | None = Query(None, description="Список жанров через запятую"),
-    languages: str | None = Query(None, description="Список языков через запятую"),
+    genres: str | None = Query(None, description="Жанры"),
+    languages: str | None = Query(None, description="Языки"),
     db: AsyncSession = Depends(get_db),
 ):
     station = await RadioService.get_random_station(db, genres=genres, languages=languages)
     if not station:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Не найдено доступных работающих радиостанций по заданным критериям",
+            detail="Станции не найдены",
         )
     return station
 
@@ -142,7 +139,7 @@ async def get_random_station(
 @router.get(
     "/genres",
     response_model=list[str],
-    summary="Список всех доступных музыкальных жанров",
+    summary="Жанры",
 )
 async def list_genres(db: AsyncSession = Depends(get_db)):
     return await RadioService.get_available_genres(db)
@@ -151,19 +148,16 @@ async def list_genres(db: AsyncSession = Depends(get_db)):
 @router.get(
     "/languages",
     response_model=list[str],
-    summary="Список доступных языков вещания",
+    summary="Языки",
 )
 async def list_languages(db: AsyncSession = Depends(get_db)):
     return await RadioService.get_available_languages(db)
 
 
-# --- Избранное (Favorites) ---
-
-
 @router.get(
     "/favorites/my",
     response_model=list[StationRead],
-    summary="Получить избранные станции текущего пользователя",
+    summary="Избранное",
 )
 async def get_my_favorites(
     current_user: User = Depends(get_current_user),
@@ -174,7 +168,7 @@ async def get_my_favorites(
 
 @router.post(
     "/favorites/{station_id}",
-    summary="Добавить станцию в избранное",
+    summary="Добавить в избранное",
 )
 async def add_to_favorites(
     station_id: int,
@@ -183,13 +177,13 @@ async def add_to_favorites(
 ):
     added = await RadioService.add_favorite(db, current_user.id, station_id)
     if not added:
-        return {"status": "ok", "message": "Станция уже в избранном"}
-    return {"status": "ok", "message": "Станция добавлена в избранное"}
+        return {"status": "ok", "message": "Уже в избранном"}
+    return {"status": "ok", "message": "Добавлено"}
 
 
 @router.delete(
     "/favorites/{station_id}",
-    summary="Удалить станцию из избранного",
+    summary="Удалить из избранного",
 )
 async def remove_from_favorites(
     station_id: int,
@@ -200,21 +194,21 @@ async def remove_from_favorites(
     if not removed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Станция не найдена в избранном",
+            detail="Нет в избранном",
         )
-    return {"status": "ok", "message": "Станция удалена из избранного"}
+    return {"status": "ok", "message": "Удалено"}
 
 
 @router.get(
     "/{station_id}/stream",
-    summary="Проксирование аудиопотока станции (обход блокировок провайдеров и CORS)",
+    summary="Аудиопоток",
 )
 async def proxy_station_stream(station_id: int, db: AsyncSession = Depends(get_db)):
     station = await db.get(Station, station_id)
     if not station or not station.primary_stream:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Станция или аудиопоток не найдены",
+            detail="Поток не найден",
         )
 
     stream_url = station.primary_stream.stream_url
@@ -251,13 +245,13 @@ async def proxy_station_stream(station_id: int, db: AsyncSession = Depends(get_d
 
 @router.get(
     "/{station_id}/now-playing",
-    summary="Получить текущий играющий трек (Now Playing) и прямую ссылку на Spotify",
+    summary="Текущий трек",
 )
 async def get_station_now_playing(station_id: int, db: AsyncSession = Depends(get_db)):
     station = await db.get(Station, station_id)
     if not station or not station.primary_stream:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Станция или аудиопоток не найдены",
+            detail="Поток не найден",
         )
     return await NowPlayingService.get_now_playing(station_id, station.primary_stream.stream_url)

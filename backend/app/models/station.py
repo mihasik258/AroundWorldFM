@@ -23,7 +23,7 @@ UTC = timezone.utc
 
 
 class Station(Base):
-    """Radio station entity with geo-location and canonical metadata."""
+    """Radio station."""
 
     __tablename__ = "stations"
     __table_args__ = (
@@ -38,14 +38,12 @@ class Station(Base):
     homepage_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     favicon_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
-    # Geo-location & Language
     country: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     country_code: Mapped[str | None] = mapped_column(String(8), nullable=True, index=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     language: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
 
-    # Normalized musical tags as PostgreSQL array with GIN index
     tags: Mapped[list[str]] = mapped_column(
         ARRAY(Text), default=list, nullable=False, server_default="{}"
     )
@@ -62,7 +60,6 @@ class Station(Base):
         nullable=False,
     )
 
-    # Relationships
     streams: Mapped[list["StationStream"]] = relationship(
         "StationStream", back_populates="station", cascade="all, delete-orphan", lazy="selectin"
     )
@@ -79,7 +76,7 @@ class Station(Base):
 
 
 class StationStream(Base):
-    """Stream URL and encoding for a station."""
+    """Station stream."""
 
     __tablename__ = "station_streams"
 
@@ -98,7 +95,6 @@ class StationStream(Base):
         nullable=False,
     )
 
-    # Relationships
     station: Mapped["Station"] = relationship("Station", back_populates="streams")
     health: Mapped["StreamHealth | None"] = relationship(
         "StreamHealth", back_populates="stream", uselist=False, cascade="all, delete-orphan", lazy="selectin"
@@ -106,7 +102,7 @@ class StationStream(Base):
 
 
 class StreamHealth(Base):
-    """Live health status and uptime telemetry for a station stream."""
+    """Stream health."""
 
     __tablename__ = "stream_health"
 
@@ -119,4 +115,3 @@ class StreamHealth(Base):
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     stream: Mapped["StationStream"] = relationship("StationStream", back_populates="health")
-

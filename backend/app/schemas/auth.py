@@ -8,16 +8,12 @@ class UserRegister(BaseModel):
 
 
 class UserLogin(BaseModel):
-    login: str = Field(..., description="Email or Username")
+    login: str = Field(..., description="Email or username")
     password: str = Field(..., min_length=1, max_length=128)
 
 
 class TokenResponse(BaseModel):
-    """Only the short-lived access token goes into the body.
-
-    The refresh token is delivered as an httpOnly cookie and never appears in
-    JSON, so page scripts cannot read it.
-    """
+    """Access token response."""
 
     access_token: str
     token_type: str = "bearer"

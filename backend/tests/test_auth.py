@@ -22,7 +22,7 @@ async def test_register_user_success(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_register_duplicate_fails(client: AsyncClient, create_users):
     payload = {
-        "email": "testuser@example.com",  # Already exists
+        "email": "testuser@example.com",
         "username": "unique_name",
         "password": "Password123!",
     }
@@ -41,13 +41,11 @@ async def test_login_success(client: AsyncClient, create_users):
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
-    # The refresh token must never be readable by page scripts: not in the body...
     assert "refresh_token" not in data
     assert data["token_type"] == "bearer"
     assert data["username"] == "testuser"
     assert data["role"] == "user"
 
-    # ...only in an httpOnly, Secure, SameSite=Strict cookie scoped to /auth
     set_cookie = response.headers["set-cookie"].lower()
     assert set_cookie.startswith("refresh_token=")
     assert "httponly" in set_cookie
