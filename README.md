@@ -18,9 +18,14 @@
 
 ## Запуск через Docker Compose
 
+Нужны Docker с Compose v2 и OpenSSL. Порты 3000, 8000 и 5432 должны быть свободны.
+
 ```bash
-docker-compose up --build
+printf "SECRET_KEY=%s\nSECRET_PEPPER=%s\n" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
+docker compose up --build
 ```
+
+Первая команда создаёт в корне репозитория `.env` с ключом подписи JWT и перцем для паролей. Без него compose не запустится, в git файл не попадает.
 
 - Web-интерфейс: http://localhost:3000
 - Swagger UI: http://localhost:8000/docs
@@ -39,9 +44,12 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env             # задать SECRET_KEY и SECRET_PEPPER
+cp .env.example .env
+sed -i "s/^SECRET_KEY=.*/SECRET_KEY=\"$(openssl rand -hex 32)\"/; s/^SECRET_PEPPER=.*/SECRET_PEPPER=\"$(openssl rand -hex 32)\"/" .env
 uvicorn app.main:app --reload --port 8000
 ```
+
+`SECRET_KEY` и `SECRET_PEPPER` обязательны и должны быть не короче 32 байт, иначе приложение не стартует.
 
 ### Frontend
 
@@ -62,12 +70,20 @@ Dev-сервер поднимается на http://localhost:5173 и прокс
 
 ## Тесты
 
-Тестам нужна отдельная база `aroundfm_test` (адрес можно переопределить через `TEST_DATABASE_URL`).
+Тестам нужна отдельная база `aroundfm_test`. Если запущен compose, создать её:
+
+```bash
+docker compose exec db psql -U postgres -c "CREATE DATABASE aroundfm_test;"
+```
+
+Тесты запускаются из окружения backend (см. «Локальный запуск»), секреты для них не нужны:
 
 ```bash
 cd backend
 pytest -v
 ```
+
+По умолчанию тесты подключаются к `postgresql+asyncpg://postgres:postgrespassword@localhost:5432/aroundfm_test`. Другой адрес задаётся переменной `TEST_DATABASE_URL`. Таблицы тестовой базы создаются перед запуском и удаляются после него.
 
 ## Структура
 
