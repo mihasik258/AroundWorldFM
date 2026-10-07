@@ -98,6 +98,7 @@ select {
 .shell {
   display: grid;
   grid-template-rows: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
   height: 100dvh;
   width: 100%;
 
@@ -186,6 +187,14 @@ select {
   cursor: grabbing;
 }
 
+.stage-canvas.is-follow-camera {
+  cursor: default;
+}
+
+.stage-canvas.is-follow-camera:active {
+  cursor: default;
+}
+
 .needle {
   position: absolute;
   inset: 0;
@@ -220,6 +229,73 @@ select {
 
 .needle.is-tuning .needle-bracket {
   stroke: var(--lamp);
+}
+
+.needle.is-locking .needle-bracket {
+  stroke: #63d3f2;
+  filter: drop-shadow(0 0 6px rgba(99, 211, 242, 0.7));
+}
+
+.needle-hint {
+  position: absolute;
+  top: calc(50% + 40px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(13, 20, 32, 0.88);
+  border: 1px solid rgba(99, 211, 242, 0.35);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 12px rgba(99, 211, 242, 0.25);
+  border-radius: 9999px;
+  padding: 5px 14px;
+  pointer-events: none;
+  z-index: 10;
+  backdrop-filter: blur(10px);
+  white-space: nowrap;
+  animation: needleHintPop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes needleHintPop {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+.needle-hint-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #63d3f2;
+  box-shadow: 0 0 8px #63d3f2;
+  animation: pulseDot 1s infinite alternate;
+}
+
+@keyframes pulseDot {
+  from { opacity: 0.7; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1.2); }
+}
+
+.needle-hint-name {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.needle-hint-country {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #63d3f2;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.9;
 }
 
 .bands {
@@ -714,3 +790,28 @@ select {
     transition-duration: 0.001ms !important;
   }
 }
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out both;
+}
+
