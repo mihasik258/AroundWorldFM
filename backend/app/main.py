@@ -16,6 +16,7 @@ from app.core.rate_limit import limiter
 from app.db.base import Base
 from app.db.session import AsyncSessionLocal, engine
 from app.services.auth_service import AuthService
+from app.services.flight_service import FlightService
 from app.services.seed_service import seed_initial_data
 
 logging.basicConfig(
@@ -46,6 +47,7 @@ async def lifespan(app: FastAPI):
 
     async with AsyncSessionLocal() as db:
         await seed_initial_data(db)
+        await FlightService.seed_flight_data(db)
 
     cleanup_task = asyncio.create_task(periodic_session_cleanup())
 
