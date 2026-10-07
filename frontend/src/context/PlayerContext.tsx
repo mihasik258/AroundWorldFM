@@ -25,10 +25,50 @@ interface PlayerContextType {
   setExcludedLanguages: (langs: string[]) => void;
   toggleLanguageExclusion: (lang: string) => void;
   rotationSecondsLeft: number;
+  resetRotationTimer: () => void;
   skipNext: (vibeOverride?: string) => Promise<void>;
   isAutoRotateEnabled: boolean;
   setIsAutoRotateEnabled: (enabled: boolean) => void;
+  setVolumeDuck: (ratio: number) => void;
 }
+
+const fadeAudio = (
+  audio: HTMLAudioElement,
+  fromVol: number,
+  toVol: number,
+  durationMs: number,
+  onComplete?: () => void
+): (() => void) => {
+  const start = Date.now();
+  let cancelled = false;
+
+  const initial = Math.max(0, Math.min(1, fromVol));
+  const target = Math.max(0, Math.min(1, toVol));
+  audio.volume = initial;
+
+  const timer = setInterval(() => {
+    if (cancelled) {
+      clearInterval(timer);
+      return;
+    }
+    const elapsed = Date.now() - start;
+    const progress = Math.min(1, elapsed / Math.max(1, durationMs));
+    const eased = 0.5 * (1 - Math.cos(progress * Math.PI));
+    const v = initial + (target - initial) * eased;
+    audio.volume = Math.max(0, Math.min(1, v));
+
+    if (progress >= 1) {
+      clearInterval(timer);
+      audio.volume = target;
+      if (onComplete) onComplete();
+    }
+  }, 25);
+
+  return () => {
+    cancelled = true;
+    clearInterval(timer);
+  };
+};
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 
@@ -38,7 +78,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [volume, setVolumeState] = useState<number>(0.8);
+  const [volume, setVolumeState] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('aroundfm_volume');
+      if (saved) return Number(saved);
+    } catch {}
+    return 0.45;
+  });
   const [favorites, setFavorites] = useState<RadioStation[]>([]);
 
   const [currentVibe, setCurrentVibeState] = useState<string>(() => {
@@ -62,68 +108,99 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [rotationSecondsLeft, setRotationSecondsLeft] = useState<number>(ROTATION_SECONDS);
   const [isAutoRotateEnabled, setIsAutoRotateEnabled] = useState<boolean>(true);
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioARef = useRef<HTMLAudioElement | null>(null);
+  const audioBRef = useRef<HTMLAudioElement | null>(null);
+  const activeSlotRef = useRef<'A' | 'B'>('A');
+  const cancelFadeARef = useRef<(() => void) | null>(null);
+  const cancelFadeBRef = useRef<(() => void) | null>(null);
+  const transitionTokenRef = useRef<number>(0);
+
   const currentStationRef = useRef<RadioStation | null>(null);
   const recentIdsRef = useRef<number[]>([]);
   const skipNextRef = useRef<() => void>(() => {});
   const isSkippingRef = useRef<boolean>(false);
+  const volumeRef = useRef<number>(volume);
+  const duckRatioRef = useRef<number>(1.0);
 
   useEffect(() => {
-    const audio = new Audio();
-    audio.preload = 'none';
-    audio.volume = volume;
+    volumeRef.current = volume;
+  }, [volume]);
 
-    let stallTimeout: any = null;
+  const setVolumeDuck = useCallback((ratio: number) => {
+    const clamped = Math.max(0, Math.min(1, ratio));
+    duckRatioRef.current = clamped;
+    const curSlot = activeSlotRef.current;
+    const activeAudio = curSlot === 'A' ? audioARef.current : audioBRef.current;
+    if (activeAudio) {
+      activeAudio.volume = Math.max(0, Math.min(1, volumeRef.current * clamped));
+    }
+  }, []);
 
-    audio.addEventListener('playing', () => {
-      if (stallTimeout) clearTimeout(stallTimeout);
-      setIsPlaying(true);
-      setIsLoading(false);
-      setError(null);
-    });
+  const cancelFade = (slot: 'A' | 'B') => {
+    if (slot === 'A' && cancelFadeARef.current) {
+      cancelFadeARef.current();
+      cancelFadeARef.current = null;
+    } else if (slot === 'B' && cancelFadeBRef.current) {
+      cancelFadeBRef.current();
+      cancelFadeBRef.current = null;
+    }
+  };
 
-    audio.addEventListener('waiting', () => {
-      setIsLoading(true);
-      if (stallTimeout) clearTimeout(stallTimeout);
-      stallTimeout = setTimeout(() => {
-        const st = currentStationRef.current;
-        if (st && audio.readyState < 2) {
-          console.warn(`Stream stalled: ${st.name}`);
-          skipNextRef.current();
-        }
-      }, 7000);
-    });
+  useEffect(() => {
+    const audioA = new Audio();
+    const audioB = new Audio();
+    audioA.preload = 'none';
+    audioB.preload = 'none';
+    audioA.volume = volumeRef.current;
+    audioB.volume = 0;
 
-    audio.addEventListener('error', () => {
-      if (stallTimeout) clearTimeout(stallTimeout);
+    let stallTimeoutA: any = null;
+    let stallTimeoutB: any = null;
 
-      if (audio.error && audio.error.code === 1) {
-        return;
-      }
-
-      const st = currentStationRef.current;
-      if (st && !audio.src.includes(`/api/v1/stations/${st.id}/stream`)) {
-        console.warn(`Direct stream failed: ${st.name}`);
+    const setupStallWatchdog = (
+      audio: HTMLAudioElement,
+      slot: 'A' | 'B',
+      getTimeout: () => any,
+      setTimeoutVal: (t: any) => void
+    ) => {
+      audio.addEventListener('waiting', () => {
+        if (activeSlotRef.current !== slot) return;
         setIsLoading(true);
-        audio.src = `/api/v1/stations/${st.id}/stream`;
-        audio.play().catch((e) => {
-          if (e.name === 'AbortError' || e.name === 'NotAllowedError') return;
-          console.warn(`Proxy stream failed: ${st.name}`);
-          skipNextRef.current();
-        });
-        return;
-      }
+        const cur = getTimeout();
+        if (cur) clearTimeout(cur);
+        setTimeoutVal(
+          setTimeout(() => {
+            const st = currentStationRef.current;
+            if (st && activeSlotRef.current === slot && audio.readyState < 2) {
+              console.warn(`Stream stalled: ${st.name}`);
+              setIsLoading(false);
+              audio.play().catch(() => {});
+            }
+          }, 7000)
+        );
+      });
 
-      console.warn(`Stream failed: ${st?.name}`);
-      skipNextRef.current();
-    });
+      audio.addEventListener('playing', () => {
+        const cur = getTimeout();
+        if (cur) clearTimeout(cur);
+      });
+    };
 
-    audioRef.current = audio;
+    setupStallWatchdog(audioA, 'A', () => stallTimeoutA, (t) => { stallTimeoutA = t; });
+    setupStallWatchdog(audioB, 'B', () => stallTimeoutB, (t) => { stallTimeoutB = t; });
+
+    audioARef.current = audioA;
+    audioBRef.current = audioB;
 
     return () => {
-      if (stallTimeout) clearTimeout(stallTimeout);
-      audio.pause();
-      audio.src = '';
+      if (stallTimeoutA) clearTimeout(stallTimeoutA);
+      if (stallTimeoutB) clearTimeout(stallTimeoutB);
+      cancelFade('A');
+      cancelFade('B');
+      audioA.pause();
+      audioA.src = '';
+      audioB.pause();
+      audioB.src = '';
     };
   }, []);
 
@@ -145,38 +222,111 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [isAuthenticated]);
 
   const playStation = useCallback((station: RadioStation) => {
-    if (!audioRef.current) return;
+    const audioA = audioARef.current;
+    const audioB = audioBRef.current;
+    if (!audioA || !audioB) return;
+
     setError(null);
     setIsLoading(true);
     setCurrentStation(station);
     currentStationRef.current = station;
 
     recentIdsRef.current = [station.id, ...recentIdsRef.current.filter((id) => id !== station.id)].slice(0, 15);
-
-    const audio = audioRef.current;
-    audio.pause();
     setRotationSecondsLeft(ROTATION_SECONDS);
 
-    audio.src = station.stream_url;
-    audio.play().catch((err) => {
+    const token = ++transitionTokenRef.current;
+
+    const curSlot = activeSlotRef.current;
+    const nextSlot: 'A' | 'B' = curSlot === 'A' ? 'B' : 'A';
+    const outAudio = curSlot === 'A' ? audioA : audioB;
+    const inAudio = nextSlot === 'A' ? audioA : audioB;
+
+    cancelFade(curSlot);
+    if (!outAudio.paused) {
+      outAudio.volume = volumeRef.current * duckRatioRef.current;
+    }
+
+    cancelFade(nextSlot);
+    inAudio.pause();
+    inAudio.volume = 0;
+    inAudio.src = station.stream_url;
+
+    let hasHandledSuccess = false;
+
+    const executeCrossfade = () => {
+      if (transitionTokenRef.current !== token || hasHandledSuccess) return;
+      hasHandledSuccess = true;
+
+      setIsPlaying(true);
+      setIsLoading(false);
+      setError(null);
+      activeSlotRef.current = nextSlot;
+
+      cancelFade(curSlot);
+      const cancelOut = fadeAudio(outAudio, outAudio.volume, 0, 320, () => {
+        outAudio.pause();
+        outAudio.src = '';
+      });
+      if (curSlot === 'A') cancelFadeARef.current = cancelOut;
+      else cancelFadeBRef.current = cancelOut;
+
+      cancelFade(nextSlot);
+      const targetVol = volumeRef.current * duckRatioRef.current;
+      const cancelIn = fadeAudio(inAudio, 0, targetVol, 320);
+      if (nextSlot === 'A') cancelFadeARef.current = cancelIn;
+      else cancelFadeBRef.current = cancelIn;
+    };
+
+    const handleFailure = () => {
+      if (transitionTokenRef.current !== token) return;
+      console.warn(`Stream failed: ${station.name}`);
+      setIsLoading(false);
+      setError(`Не удалось подключиться к «${station.name}»`);
+      cancelFade(nextSlot);
+      inAudio.pause();
+      inAudio.src = '';
+      if (!outAudio.paused) {
+        outAudio.volume = volumeRef.current * duckRatioRef.current;
+        setIsPlaying(true);
+      }
+    };
+
+    const onError = () => {
+      inAudio.removeEventListener('playing', onPlaying);
+      inAudio.removeEventListener('error', onError);
+      if (transitionTokenRef.current !== token) return;
+
+      if (!inAudio.src.includes(`/api/v1/stations/${station.id}/stream`)) {
+        console.warn(`Direct stream failed: ${station.name}`);
+        inAudio.src = `/api/v1/stations/${station.id}/stream`;
+        inAudio.addEventListener('playing', onPlaying, { once: true });
+        inAudio.addEventListener('error', onError, { once: true });
+        inAudio.play().catch((e) => {
+          if (e.name === 'AbortError' || e.name === 'NotAllowedError') return;
+          handleFailure();
+        });
+        return;
+      }
+      handleFailure();
+    };
+
+    const onPlaying = () => {
+      inAudio.removeEventListener('playing', onPlaying);
+      inAudio.removeEventListener('error', onError);
+      executeCrossfade();
+    };
+
+    inAudio.addEventListener('playing', onPlaying, { once: true });
+    inAudio.addEventListener('error', onError, { once: true });
+
+    inAudio.play().catch((err) => {
       if (err.name === 'AbortError') return;
       if (err.name === 'NotAllowedError') {
         setIsLoading(false);
         setIsPlaying(false);
         return;
       }
-      console.warn('Direct play failed', err);
-      audio.src = `/api/v1/stations/${station.id}/stream`;
-      audio.play().catch((e) => {
-        if (e.name === 'AbortError' || e.name === 'NotAllowedError') {
-          setIsLoading(false);
-          setIsPlaying(false);
-          return;
-        }
-        setIsLoading(false);
-        setIsPlaying(false);
-        setError('Поток недоступен');
-      });
+      if (!inAudio.src.includes(`/api/v1/stations/${station.id}/stream`)) onError();
     });
   }, []);
 
@@ -250,25 +400,40 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [isPlaying, isAutoRotateEnabled, skipNext]);
 
   const togglePlay = () => {
-    if (!audioRef.current) return;
+    const curSlot = activeSlotRef.current;
+    const activeAudio = curSlot === 'A' ? audioARef.current : audioBRef.current;
+    if (!activeAudio) return;
 
-    if (!currentStation) {
+    if (!currentStationRef.current) {
       skipNext();
       return;
     }
 
     if (isPlaying) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      setIsLoading(true);
-      audioRef.current.play().then(() => {
-        setIsPlaying(true);
-        setIsLoading(false);
-      }).catch(() => {
-        setIsLoading(false);
+      cancelFade(curSlot);
+      const cancel = fadeAudio(activeAudio, activeAudio.volume, 0, 300, () => {
+        activeAudio.pause();
         setIsPlaying(false);
       });
+      if (curSlot === 'A') cancelFadeARef.current = cancel;
+      else cancelFadeBRef.current = cancel;
+    } else {
+      cancelFade(curSlot);
+      setIsLoading(true);
+      activeAudio.volume = 0;
+      activeAudio
+        .play()
+        .then(() => {
+          setIsPlaying(true);
+          setIsLoading(false);
+          const cancel = fadeAudio(activeAudio, 0, volumeRef.current, 350);
+          if (curSlot === 'A') cancelFadeARef.current = cancel;
+          else cancelFadeBRef.current = cancel;
+        })
+        .catch(() => {
+          setIsLoading(false);
+          setIsPlaying(false);
+        });
     }
   };
 
@@ -290,8 +455,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const setVolume = (vol: number) => {
     setVolumeState(vol);
-    if (audioRef.current) {
-      audioRef.current.volume = vol;
+    volumeRef.current = vol;
+    const curSlot = activeSlotRef.current;
+    const activeAudio = curSlot === 'A' ? audioARef.current : audioBRef.current;
+    if (activeAudio) {
+      activeAudio.volume = Math.max(0, Math.min(1, vol));
     }
   };
 
@@ -316,6 +484,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const resetRotationTimer = useCallback(() => {
+    setRotationSecondsLeft(ROTATION_SECONDS);
+  }, []);
+
   return (
     <PlayerContext.Provider
       value={{
@@ -337,9 +509,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setExcludedLanguages,
         toggleLanguageExclusion,
         rotationSecondsLeft,
+        resetRotationTimer,
         skipNext,
         isAutoRotateEnabled,
         setIsAutoRotateEnabled,
+        setVolumeDuck,
       }}
     >
       {children}
