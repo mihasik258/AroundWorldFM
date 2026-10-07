@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { usePlayer } from '../context/PlayerContext';
 import { useAuth } from '../context/AuthContext';
+import { useFlight } from '../context/FlightContext';
 import { apiRequest } from '../api/client';
 import {
   Play,
@@ -31,7 +32,10 @@ export const Player: React.FC<PlayerProps> = ({ onOpenAuth }) => {
     toggleFavorite,
     rotationSecondsLeft,
     skipNext,
+    isAutoRotateEnabled,
   } = usePlayer();
+
+  const { isFlightMode, activeRoute, openPlanner } = useFlight();
 
   const { isAuthenticated } = useAuth();
 
@@ -157,7 +161,12 @@ export const Player: React.FC<PlayerProps> = ({ onOpenAuth }) => {
   return (
     <section className="console arrive arrive-2">
       <div className="rotation-track">
-        <div className="rotation-fill" style={{ width: `${timerPercent}%` }} />
+        {!isFlightMode && isAutoRotateEnabled && (
+          <div
+            className="rotation-fill"
+            style={{ width: `${timerPercent}%` }}
+          />
+        )}
       </div>
 
       <div className="console-head">
@@ -166,9 +175,27 @@ export const Player: React.FC<PlayerProps> = ({ onOpenAuth }) => {
           {statusLabel}
         </span>
 
-        <span className="next-in">
-          следующая<span className="num">{timerStr}</span>
-        </span>
+        {!isFlightMode ? (
+          isAutoRotateEnabled ? (
+            <span className="next-in">
+              следующая<span className="num">{timerStr}</span>
+            </span>
+          ) : (
+            <span className="next-in" style={{ opacity: 0.7 }}>
+              прямой эфир
+            </span>
+          )
+        ) : (
+          <button
+            type="button"
+            onClick={openPlanner}
+            className="next-in cursor-pointer hover:opacity-80 transition-opacity bg-transparent border-0 p-0 text-inherit font-inherit text-left inline-flex items-center gap-1"
+            title="Сменить рейс"
+            style={{ color: '#38bdf8' }}
+          >
+            рейс <span className="num" style={{ color: '#7dd3fc', fontWeight: 600 }}>{activeRoute?.flight_number}</span>
+          </button>
+        )}
       </div>
 
       <h1 className="station-name">{currentStation.name}</h1>
@@ -253,9 +280,11 @@ export const Player: React.FC<PlayerProps> = ({ onOpenAuth }) => {
             )}
           </button>
 
-          <button className="key" onClick={() => skipNext()} title="Следующая станция">
-            <SkipForward className="w-5 h-5" />
-          </button>
+          {!isFlightMode && (
+            <button className="key" onClick={() => skipNext()} title="Следующая станция">
+              <SkipForward className="w-5 h-5" />
+            </button>
+          )}
 
           <button
             className={`key${isFav ? ' is-on' : ''}`}

@@ -10,6 +10,7 @@ import { AuthModal } from './components/AuthModal';
 import { SessionsModal } from './components/SessionsModal';
 import { AdminModal } from './components/AdminModal';
 import { FlightPlanner } from './components/FlightPlanner';
+import { FlightHud } from './components/FlightHud';
 import { usePlayer } from './context/PlayerContext';
 import { useFlight } from './context/FlightContext';
 
@@ -53,6 +54,7 @@ export const App: React.FC = () => {
         <Globe stations={stations} />
         {!isFlightMode && !isPlannerOpen && <VibeBar />}
         <FlightPlanner />
+        <FlightHud />
       </main>
 
       <Player onOpenAuth={() => setAuthModalOpen(true)} />
