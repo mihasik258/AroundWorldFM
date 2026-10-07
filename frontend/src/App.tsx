@@ -9,10 +9,13 @@ import { LanguageFilterModal } from './components/LanguageFilterModal';
 import { AuthModal } from './components/AuthModal';
 import { SessionsModal } from './components/SessionsModal';
 import { AdminModal } from './components/AdminModal';
+import { FlightPlanner } from './components/FlightPlanner';
 import { usePlayer } from './context/PlayerContext';
+import { useFlight } from './context/FlightContext';
 
 export const App: React.FC = () => {
   const { currentStation, skipNext, currentVibe, excludedLanguages } = usePlayer();
+  const { isFlightMode, isPlannerOpen } = useFlight();
 
   const [stations, setStations] = useState<RadioStation[]>([]);
 
@@ -48,7 +51,8 @@ export const App: React.FC = () => {
 
       <main className="stage">
         <Globe stations={stations} />
-        <VibeBar />
+        {!isFlightMode && !isPlannerOpen && <VibeBar />}
+        <FlightPlanner />
       </main>
 
       <Player onOpenAuth={() => setAuthModalOpen(true)} />
