@@ -214,7 +214,6 @@ export const FlightPlanner: React.FC = () => {
               ))}
             </ul>
           )}
-          <p className="planner-hint">Наведите на линию на глобусе — покажем рейс. Клик — взлёт.</p>
         </div>
       ) : (
         <div className="planner-body no-scrollbar">
@@ -234,7 +233,7 @@ export const FlightPlanner: React.FC = () => {
           </button>
           <CityField label="Куда" value={customTo} exclude={customFrom} onChange={setCustomTo} />
 
-          {draftRoute ? (
+          {draftRoute && (
             <div className="plan-draft">
               <div className="plan-draft-stats">
                 <div>
@@ -261,11 +260,6 @@ export const FlightPlanner: React.FC = () => {
                 Взлететь
               </button>
             </div>
-          ) : (
-            <p className="planner-hint">
-              Выберите города в полях или щёлкните по точкам на глобусе: первый клик — вылет, второй —
-              прилёт.
-            </p>
           )}
         </div>
       )}

@@ -29,7 +29,6 @@ interface PlayerContextType {
   skipNext: (vibeOverride?: string) => Promise<void>;
   isAutoRotateEnabled: boolean;
   setIsAutoRotateEnabled: (enabled: boolean) => void;
-  setVolumeDuck: (ratio: number) => void;
 }
 
 const fadeAudio = (
@@ -120,21 +119,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const skipNextRef = useRef<() => void>(() => {});
   const isSkippingRef = useRef<boolean>(false);
   const volumeRef = useRef<number>(volume);
-  const duckRatioRef = useRef<number>(1.0);
 
   useEffect(() => {
     volumeRef.current = volume;
   }, [volume]);
-
-  const setVolumeDuck = useCallback((ratio: number) => {
-    const clamped = Math.max(0, Math.min(1, ratio));
-    duckRatioRef.current = clamped;
-    const curSlot = activeSlotRef.current;
-    const activeAudio = curSlot === 'A' ? audioARef.current : audioBRef.current;
-    if (activeAudio) {
-      activeAudio.volume = Math.max(0, Math.min(1, volumeRef.current * clamped));
-    }
-  }, []);
 
   const cancelFade = (slot: 'A' | 'B') => {
     if (slot === 'A' && cancelFadeARef.current) {
@@ -243,7 +231,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     cancelFade(curSlot);
     if (!outAudio.paused) {
-      outAudio.volume = volumeRef.current * duckRatioRef.current;
+      outAudio.volume = volumeRef.current;
     }
 
     cancelFade(nextSlot);
@@ -271,7 +259,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       else cancelFadeBRef.current = cancelOut;
 
       cancelFade(nextSlot);
-      const targetVol = volumeRef.current * duckRatioRef.current;
+      const targetVol = volumeRef.current;
       const cancelIn = fadeAudio(inAudio, 0, targetVol, 320);
       if (nextSlot === 'A') cancelFadeARef.current = cancelIn;
       else cancelFadeBRef.current = cancelIn;
@@ -286,7 +274,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       inAudio.pause();
       inAudio.src = '';
       if (!outAudio.paused) {
-        outAudio.volume = volumeRef.current * duckRatioRef.current;
+        outAudio.volume = volumeRef.current;
         setIsPlaying(true);
       }
     };
@@ -513,7 +501,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         skipNext,
         isAutoRotateEnabled,
         setIsAutoRotateEnabled,
-        setVolumeDuck,
       }}
     >
       {children}

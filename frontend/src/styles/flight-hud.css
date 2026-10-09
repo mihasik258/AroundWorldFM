@@ -1,32 +1,39 @@
 .fhud {
   position: absolute;
   z-index: 12;
-  top: 16px;
-  left: 16px;
-  width: 300px;
-  padding: 12px 14px 14px;
-  background: rgba(7, 10, 16, 0.74);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.8);
+  top: 0;
+  left: 0;
+  width: 330px;
+  padding: 18px 18px 20px 28px;
+  background: radial-gradient(130% 110% at 0 0, rgba(4, 7, 13, 0.8) 0%, rgba(4, 7, 13, 0.45) 50%, transparent 72%);
 }
 
 .fhud-top {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .fhud-flight {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: 13px;
-  font-weight: 500;
-  color: var(--sky, #63d3f2);
+  color: var(--bone);
+}
+
+.fhud-flight::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lamp);
+  box-shadow: 0 0 8px rgba(255, 179, 71, 0.8);
+  animation: breathe 3.4s ease-in-out infinite;
 }
 
 .fhud-airline {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ash);
   white-space: nowrap;
   overflow: hidden;
@@ -42,20 +49,20 @@
 .fhud-btn {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   color: var(--ash);
-  border-radius: 5px;
+  border-radius: 4px;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
 .fhud-btn:hover {
   color: var(--bone);
-  background: rgba(232, 227, 216, 0.06);
+  background: rgba(232, 227, 216, 0.05);
 }
 
 .fhud-btn.is-on {
-  color: var(--sky, #63d3f2);
+  color: var(--lamp);
 }
 
 .fhud-btn.is-exit:hover {
@@ -65,8 +72,8 @@
 .fhud-route {
   display: flex;
   align-items: flex-end;
-  gap: 12px;
-  margin-top: 10px;
+  gap: 14px;
+  margin-top: 12px;
 }
 
 .fhud-end {
@@ -79,31 +86,26 @@
 }
 
 .fhud-code {
-  font-size: 24px;
+  font-size: 27px;
   font-weight: 500;
   line-height: 1.1;
   color: var(--bone);
-  letter-spacing: 0.01em;
-}
-
-.fhud-end.is-dest .fhud-code {
-  color: var(--lamp);
 }
 
 .fhud-city {
-  font-size: 11.5px;
+  font-size: 13px;
   color: var(--ash);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 90px;
+  max-width: 100px;
 }
 
 .fhud-track {
   position: relative;
   flex: 1;
-  height: 16px;
-  margin-bottom: 22px;
+  height: 14px;
+  margin-bottom: 24px;
 }
 
 .fhud-track-line,
@@ -116,63 +118,50 @@
 
 .fhud-track-line {
   right: 0;
-  background: repeating-linear-gradient(90deg, var(--line-strong) 0 4px, transparent 4px 8px);
+  background: var(--line-strong);
 }
 
 .fhud-track-fill {
-  background: linear-gradient(90deg, rgba(99, 211, 242, 0.2), var(--sky, #63d3f2));
-  box-shadow: 0 0 6px rgba(99, 211, 242, 0.6);
+  background: var(--lamp);
+  opacity: 0.55;
 }
 
 .fhud-track-plane {
   position: absolute;
   top: 50%;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   color: var(--bone);
   transform: translate(-50%, -50%) rotate(45deg);
-  filter: drop-shadow(0 0 5px rgba(99, 211, 242, 0.8));
 }
 
 .fhud-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1px;
-  margin-top: 12px;
-  background: var(--line);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-.fhud-grid > div {
-  padding: 7px 10px 8px;
-  background: #0a0e16;
+  gap: 10px 20px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
 
 .fhud-grid dt {
-  font-size: 10px;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font-size: 12px;
   color: var(--dim);
 }
 
 .fhud-grid dd {
-  margin-top: 1px;
   font-size: 15px;
   color: var(--bone);
 }
 
 .fhud-grid small {
   margin-left: 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ash);
 }
 
 .fhud-now {
-  display: grid;
-  gap: 6px;
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 .fhud-where {
@@ -181,11 +170,11 @@
   justify-content: space-between;
   gap: 10px;
   font-size: 13px;
-  color: var(--bone);
+  color: var(--ash);
 }
 
 .fhud-coords {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--dim);
   white-space: nowrap;
 }
@@ -198,9 +187,9 @@
   bottom: 0;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   padding: 26px 28px 12px;
-  background: linear-gradient(to top, rgba(4, 7, 13, 0.92) 40%, transparent);
+  background: linear-gradient(to top, rgba(4, 7, 13, 0.92) 45%, transparent);
 }
 
 .ftl-keys {
@@ -212,9 +201,9 @@
 .ftl-play {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  margin: 0 2px;
+  width: 38px;
+  height: 38px;
+  margin: 0 4px;
   color: var(--bone);
   border: 1px solid var(--line-strong);
   border-radius: 50%;
@@ -222,18 +211,18 @@
 }
 
 .ftl-play:hover {
-  color: var(--sky, #63d3f2);
-  border-color: var(--sky, #63d3f2);
+  color: var(--lamp);
+  border-color: var(--lamp);
 }
 
 .ftl-time {
   font-size: 12px;
-  color: var(--sky, #63d3f2);
+  color: var(--bone);
   min-width: 44px;
 }
 
 .ftl-time.is-left {
-  color: var(--ash);
+  color: var(--dim);
   text-align: right;
 }
 
@@ -249,21 +238,19 @@
   position: absolute;
   left: 0;
   top: 50%;
-  height: 2px;
-  margin-top: -1px;
-  border-radius: 2px;
+  height: 1px;
   pointer-events: none;
 }
 
 .ftl-rail {
   right: 0;
-  background: rgba(232, 227, 216, 0.12);
+  background: var(--line-strong);
 }
 
 .ftl-fill {
   width: var(--p);
-  background: linear-gradient(90deg, rgba(99, 211, 242, 0.35), var(--sky, #63d3f2));
-  box-shadow: 0 0 8px rgba(99, 211, 242, 0.5);
+  background: var(--lamp);
+  opacity: 0.55;
 }
 
 .ftl-range {
@@ -289,21 +276,19 @@
 
 .ftl-range::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  margin-top: 8px;
-  border-radius: 50%;
+  width: 3px;
+  height: 14px;
+  margin-top: 7px;
+  border-radius: 0;
   background: var(--bone);
-  box-shadow: 0 0 0 4px rgba(99, 211, 242, 0.25), 0 0 12px rgba(99, 211, 242, 0.8);
 }
 
 .ftl-range::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 3px;
+  height: 14px;
   border: none;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--bone);
-  box-shadow: 0 0 0 4px rgba(99, 211, 242, 0.25), 0 0 12px rgba(99, 211, 242, 0.8);
 }
 
 .ftl-sight {
@@ -319,26 +304,27 @@
 
 .ftl-sight::before {
   content: '';
-  width: 7px;
-  height: 7px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: #0a0e16;
-  border: 1.5px solid rgba(99, 211, 242, 0.75);
-  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+  background: var(--void);
+  border: 1px solid var(--ash);
+  transition: transform 0.15s ease, background 0.25s ease, border-color 0.25s ease,
+    box-shadow 0.25s ease;
 }
 
 .ftl-sight.is-scenic::before {
-  border-color: rgba(95, 224, 193, 0.75);
+  border-color: var(--dim);
 }
 
 .ftl-sight.is-taken::before {
   background: var(--lamp);
   border-color: var(--lamp);
-  box-shadow: 0 0 8px rgba(255, 179, 71, 0.8);
+  box-shadow: 0 0 9px rgba(255, 179, 71, 0.7);
 }
 
 .ftl-sight:hover::before {
-  transform: scale(1.4);
+  transform: scale(1.5);
 }
 
 .ftl-sight-label {
@@ -349,11 +335,11 @@
   align-items: center;
   gap: 5px;
   padding: 4px 8px;
-  font-size: 11.5px;
+  font-size: 12px;
   white-space: nowrap;
   color: var(--bone);
-  background: rgba(8, 12, 20, 0.95);
-  border: 1px solid var(--line-strong);
+  background: rgba(4, 7, 13, 0.92);
+  border: 1px solid var(--line);
   border-radius: 4px;
   transform: translate(-50%, 4px);
   opacity: 0;
@@ -368,44 +354,36 @@
 
 .ftl-speed {
   display: flex;
-  gap: 1px;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
+  gap: 2px;
 }
 
 .ftl-speed button {
-  padding: 4px 8px;
-  font-size: 11.5px;
+  padding: 5px 7px;
+  font-size: 12px;
   color: var(--dim);
-  border-radius: 3px;
-  transition: color 0.15s ease, background 0.15s ease;
+  border-radius: 4px;
+  transition: color 0.15s ease;
 }
 
 .ftl-speed button:hover {
-  color: var(--bone);
+  color: var(--ash);
 }
 
 .ftl-speed button.is-on {
-  color: var(--void);
-  background: var(--sky, #63d3f2);
+  color: var(--lamp);
 }
 
 @media (max-width: 720px) {
   .fhud {
-    left: 8px;
-    right: 8px;
-    top: 8px;
+    right: 0;
     width: auto;
-    padding: 10px 12px 12px;
+    padding: 12px 12px 16px 18px;
+    background: linear-gradient(to bottom, rgba(4, 7, 13, 0.85) 60%, transparent);
   }
 
   .fhud-grid {
     grid-template-columns: repeat(4, 1fr);
-  }
-
-  .fhud-grid > div {
-    padding: 6px 7px;
+    gap: 8px 12px;
   }
 
   .fhud-grid dd {

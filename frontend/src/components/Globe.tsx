@@ -434,7 +434,7 @@ const sameTarget = (a: HoverTarget | null, b: HoverTarget | null) => {
 
 export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { currentStation, playStation, setVolumeDuck } = usePlayer();
+  const { currentStation, playStation } = usePlayer();
   const {
     isFlightMode,
     activeRoute,
@@ -465,9 +465,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
   const globeGroupRef = useRef<THREE.Group | null>(null);
   const targetRotationRef = useRef<{ x: number; y: number } | null>(null);
   const isManualTuningRef = useRef<boolean>(false);
-  const [candidateStation, setCandidateStation] = useState<RadioStation | null>(null);
-  const candidateStationRef = useRef<RadioStation | null>(null);
-  const targetBeaconRef = useRef<THREE.Group | null>(null);
   const beaconRef = useRef<THREE.Group | null>(null);
   const prevStationIdRef = useRef<number | null>(null);
   const stationPinsGroupRef = useRef<THREE.Group | null>(null);
@@ -538,8 +535,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
   currentStationRef.current = currentStation;
   const playStationRef = useRef(playStation);
   playStationRef.current = playStation;
-  const setVolumeDuckRef = useRef(setVolumeDuck);
-  setVolumeDuckRef.current = setVolumeDuck;
 
   useEffect(() => {
     fetch('/countries.geojson')
@@ -864,51 +859,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     );
     beacon.add(core);
 
-    const targetBeacon = new THREE.Group();
-    targetBeacon.visible = false;
-    stationLayer.add(targetBeacon);
-    targetBeaconRef.current = targetBeacon;
-
-    const targetBeamHeight = 28;
-    const targetBeamMat = new THREE.ShaderMaterial({
-      uniforms: {
-        uColor: { value: new THREE.Color(0x63d3f2) },
-        uIntensity: { value: 0.6 },
-      },
-      vertexShader: `
-        varying float vH;
-        void main() {
-          vH = uv.y;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 uColor;
-        uniform float uIntensity;
-        varying float vH;
-        void main() {
-          gl_FragColor = vec4(uColor, (1.0 - vH) * uIntensity);
-        }
-      `,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-    const targetBeam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.5, 2.0, targetBeamHeight, 24, 1, true),
-      targetBeamMat
-    );
-    targetBeam.position.y = targetBeamHeight / 2;
-    targetBeacon.add(targetBeam);
-
-    const targetCoreMat = new THREE.MeshBasicMaterial({ color: 0x63d3f2, transparent: true, opacity: 0.95 });
-    const targetCore = new THREE.Mesh(
-      new THREE.SphereGeometry(2.0, 20, 20),
-      targetCoreMat
-    );
-    targetBeacon.add(targetCore);
-
     scene.add(new THREE.AmbientLight(0x1a2740, 0.55));
 
     const sunLight = new THREE.DirectionalLight(0xfff2d8, 2.5);
@@ -932,20 +882,7 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     let velocityY = 0;
     let totalDragDistance = 0;
 
-    const SNAP_RELEASE_DIST = 5.5;
-
-    let currentBeaconIntensity = 1.0;
-    let targetBeaconIntensity = 0.0;
-
-    let currentDuck = 1.0;
-    let targetDuck = 1.0;
-
-    let anchorStation: RadioStation | null = null;
-    let anchorCoords: { lat: number; lon: number } | null = null;
-    let isTetheredToAnchor = false;
-
-    let targetCandidate: RadioStation | null = null;
-    let targetCandidateCoords: { lat: number; lon: number } | null = null;
+    let settlePending = false;
 
     const getStationCandidates = (): RadioStation[] => {
       const current = currentStationRef.current;
@@ -981,12 +918,29 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
 
     const isFreeSpin = () => isFlightModeRef.current || isPlannerOpenRef.current;
 
+    const settleOnNearest = () => {
+      settlePending = false;
+      const { closest } = getClosestStation(globeGroup, getStationCandidates());
+      if (!closest) return;
+      const c = stationCoords(closest);
+      if (c) {
+        targetRotationRef.current = getTargetRotation(c.lat, c.lon, globeGroup.rotation.y);
+        velocityX = 0;
+        velocityY = 0;
+      }
+      if (closest.id !== currentStationRef.current?.id) {
+        isManualTuningRef.current = true;
+        playStationRef.current(closest);
+      }
+    };
+
     const startDrag = (x: number, y: number) => {
       updatePointer(x, y);
       if (isFlightModeRef.current && followCameraRef.current && !isPlannerOpenRef.current) {
         return;
       }
       isDragging = true;
+      settlePending = false;
       targetRotationRef.current = null;
       if (!isFreeSpin()) {
         setIsTuning(true);
@@ -995,32 +949,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
       velocityX = 0;
       velocityY = 0;
       totalDragDistance = 0;
-
-      const reticleLat = Math.max(-85, Math.min(85, (globeGroup.rotation.x * 180) / Math.PI));
-      let reticleLon = (-(globeGroup.rotation.y + Math.PI / 2) * 180) / Math.PI;
-      reticleLon = (((reticleLon + 180) % 360) + 360) % 360 - 180;
-      const cosLat = Math.cos((reticleLat * Math.PI) / 180);
-
-      const curSt = currentStationRef.current;
-      anchorStation = curSt;
-      anchorCoords = curSt ? stationCoords(curSt) : null;
-
-      if (anchorCoords) {
-        const dLat = anchorCoords.lat - reticleLat;
-        let dLon = Math.abs(anchorCoords.lon - reticleLon);
-        if (dLon > 180) dLon = 360 - dLon;
-        const initialDistToAnchor = Math.hypot(dLat, dLon * cosLat);
-        isTetheredToAnchor = initialDistToAnchor < 8.0;
-      } else {
-        isTetheredToAnchor = false;
-      }
-
-      targetCandidate = null;
-      targetCandidateCoords = null;
-      targetBeacon.visible = false;
-      targetBeaconIntensity = 0;
-      currentBeaconIntensity = 1.0;
-      targetDuck = 1.0;
     };
 
     const moveDrag = (x: number, y: number) => {
@@ -1034,114 +962,11 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
       const dy = y - previous.y;
       totalDragDistance += Math.abs(dx) + Math.abs(dy);
 
-      const rawDeltaY = dx * 0.0035;
-      const rawDeltaX = dy * 0.0035;
-
-      if (isFreeSpin()) {
-        globeGroup.rotation.y += rawDeltaY;
-        globeGroup.rotation.x += rawDeltaX;
-        globeGroup.rotation.x = Math.max(-1.45, Math.min(1.45, globeGroup.rotation.x));
-        velocityX = velocityX * 0.3 + rawDeltaY * 0.7;
-        velocityY = velocityY * 0.3 + rawDeltaX * 0.7;
-        previous = { x, y };
-        return;
-      }
-
-      let deltaY = rawDeltaY;
-      let deltaX = rawDeltaX;
-
-      const reticleLat = Math.max(-85, Math.min(85, (globeGroup.rotation.x * 180) / Math.PI));
-      let reticleLon = (-(globeGroup.rotation.y + Math.PI / 2) * 180) / Math.PI;
-      reticleLon = (((reticleLon + 180) % 360) + 360) % 360 - 180;
-      const cosLat = Math.cos((reticleLat * Math.PI) / 180);
-
-      let distToAnchor = Infinity;
-      if (anchorCoords) {
-        const dLat = anchorCoords.lat - reticleLat;
-        let dLon = Math.abs(anchorCoords.lon - reticleLon);
-        if (dLon > 180) dLon = 360 - dLon;
-        distToAnchor = Math.hypot(dLat, dLon * cosLat);
-      }
-
-      let nearestOther: RadioStation | null = null;
-      let distToOther = Infinity;
-      let otherCoords: { lat: number; lon: number } | null = null;
-
-      for (const st of stationsRef.current || []) {
-        if (anchorStation && st.id === anchorStation.id) continue;
-        const c = stationCoords(st);
-        if (!c) continue;
-        const dLat = c.lat - reticleLat;
-        let dLon = Math.abs(c.lon - reticleLon);
-        if (dLon > 180) dLon = 360 - dLon;
-        const dist = Math.hypot(dLat, dLon * cosLat);
-        if (dist < distToOther) {
-          distToOther = dist;
-          nearestOther = st;
-          otherCoords = c;
-        }
-      }
-
-      const isApproachingOther =
-        nearestOther !== null &&
-        distToOther <= 6.0 &&
-        (distToOther < distToAnchor || distToAnchor > 4.5 || !anchorStation);
-
-      if (isApproachingOther && nearestOther && otherCoords) {
-        targetCandidate = nearestOther;
-        targetCandidateCoords = otherCoords;
-
-        const p = toVector(otherCoords.lat, otherCoords.lon);
-        targetBeacon.position.copy(p);
-        targetBeacon.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p.clone().normalize());
-        targetBeacon.visible = true;
-
-        const closeness = Math.max(0, Math.min(1, 1 - distToOther / 6.0));
-        targetBeaconIntensity = 0.25 + 0.75 * closeness;
-
-        currentBeaconIntensity = Math.max(0.15, 1.0 - closeness * 0.85);
-
-        targetDuck = Math.max(0.65, 1.0 - closeness * 0.35);
-
-        if (distToOther < 4.0) {
-          deltaY = rawDeltaY * 0.6;
-          deltaX = rawDeltaX * 0.6;
-        }
-
-        if (candidateStationRef.current?.id !== nearestOther.id) {
-          candidateStationRef.current = nearestOther;
-          setCandidateStation(nearestOther);
-        }
-      } else {
-        targetCandidate = null;
-        targetCandidateCoords = null;
-        targetBeacon.visible = false;
-        targetBeaconIntensity = 0;
-
-        if (candidateStationRef.current !== null) {
-          candidateStationRef.current = null;
-          setCandidateStation(null);
-        }
-
-        if (isTetheredToAnchor && anchorStation && anchorCoords && distToAnchor < 8.0) {
-          const stretch = distToAnchor / 8.0;
-          const damping = Math.max(0.35, 0.7 - stretch * 0.35);
-          deltaY = rawDeltaY * damping;
-          deltaX = rawDeltaX * damping;
-
-          currentBeaconIntensity = Math.max(0.3, 1.0 - stretch * 0.7);
-          targetDuck = Math.max(0.65, 1.0 - stretch * 0.35);
-        } else {
-          isTetheredToAnchor = false;
-          currentBeaconIntensity = 1.0;
-          targetDuck = 1.0;
-        }
-      }
-
+      const deltaY = dx * 0.0035;
+      const deltaX = dy * 0.0035;
       globeGroup.rotation.y += deltaY;
       globeGroup.rotation.x += deltaX;
       globeGroup.rotation.x = Math.max(-1.45, Math.min(1.45, globeGroup.rotation.x));
-
       velocityX = velocityX * 0.3 + deltaY * 0.7;
       velocityY = velocityY * 0.3 + deltaX * 0.7;
       previous = { x, y };
@@ -1151,15 +976,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
       if (!isDragging) return;
       isDragging = false;
       setIsTuning(false);
-
-      targetDuck = 1.0;
-      currentBeaconIntensity = 1.0;
-      targetBeaconIntensity = 0;
-      targetBeacon.visible = false;
-      if (candidateStationRef.current !== null) {
-        candidateStationRef.current = null;
-        setCandidateStation(null);
-      }
 
       if (totalDragDistance < 6 && isPlannerOpenRef.current) {
         const target = hoverRef.current;
@@ -1179,70 +995,10 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
         }
       }
 
-      if (isFreeSpin()) {
+      if (isFreeSpin() || totalDragDistance < 6) {
         return;
       }
-
-      if (targetCandidate && targetCandidateCoords) {
-        targetRotationRef.current = getTargetRotation(
-          targetCandidateCoords.lat,
-          targetCandidateCoords.lon,
-          globeGroup.rotation.y
-        );
-        velocityX = 0;
-        velocityY = 0;
-        if (targetCandidate.id !== currentStationRef.current?.id) {
-          isManualTuningRef.current = true;
-          playStationRef.current(targetCandidate);
-        }
-        targetCandidate = null;
-        targetCandidateCoords = null;
-        isTetheredToAnchor = false;
-        return;
-      }
-
-      if (isTetheredToAnchor && anchorStation && anchorCoords) {
-        const reticleLat = Math.max(-85, Math.min(85, (globeGroup.rotation.x * 180) / Math.PI));
-        let reticleLon = (-(globeGroup.rotation.y + Math.PI / 2) * 180) / Math.PI;
-        reticleLon = (((reticleLon + 180) % 360) + 360) % 360 - 180;
-        const cosLat = Math.cos((reticleLat * Math.PI) / 180);
-
-        const dLat = anchorCoords.lat - reticleLat;
-        let dLon = Math.abs(anchorCoords.lon - reticleLon);
-        if (dLon > 180) dLon = 360 - dLon;
-        const distToAnchor = Math.hypot(dLat, dLon * cosLat);
-
-        if (distToAnchor < 8.0) {
-          targetRotationRef.current = getTargetRotation(
-            anchorCoords.lat,
-            anchorCoords.lon,
-            globeGroup.rotation.y
-          );
-          velocityX = 0;
-          velocityY = 0;
-          isTetheredToAnchor = false;
-          return;
-        }
-      }
-      isTetheredToAnchor = false;
-
-      const { closest, dist } = getClosestStation(globeGroup, getStationCandidates());
-      if (closest && dist < SNAP_RELEASE_DIST) {
-        const c = stationCoords(closest);
-        if (c) {
-          targetRotationRef.current = getTargetRotation(
-            c.lat,
-            c.lon,
-            globeGroup.rotation.y
-          );
-          velocityX = 0;
-          velocityY = 0;
-        }
-        if (closest.id !== currentStationRef.current?.id) {
-          isManualTuningRef.current = true;
-          playStationRef.current(closest);
-        }
-      }
+      settlePending = true;
     };
 
     const pointer = { x: 0, y: 0, inside: false };
@@ -1398,14 +1154,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
         }
       }
 
-      if (Math.abs(targetDuck - currentDuck) > 0.002) {
-        currentDuck += (targetDuck - currentDuck) * 0.12;
-        setVolumeDuckRef.current(currentDuck);
-      } else if (currentDuck !== targetDuck) {
-        currentDuck = targetDuck;
-        setVolumeDuckRef.current(currentDuck);
-      }
-
       if (isFlightModeRef.current && followCameraRef.current && !isPlannerOpenRef.current) {
         velocityX = 0;
         velocityY = 0;
@@ -1429,25 +1177,13 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
         globeGroup.rotation.x = Math.max(-1.45, Math.min(1.45, globeGroup.rotation.x));
         velocityX *= 0.95;
         velocityY *= 0.95;
+      }
 
-        if (!isFreeSpin() && Math.hypot(velocityX, velocityY) < 0.0006) {
-          const { closest, dist } = getClosestStation(globeGroup, getStationCandidates());
-          if (closest && dist < 3.5) {
-            const c = stationCoords(closest);
-            if (c) {
-              targetRotationRef.current = getTargetRotation(
-                c.lat,
-                c.lon,
-                globeGroup.rotation.y
-              );
-              velocityX = 0;
-              velocityY = 0;
-            }
-            if (closest.id !== currentStationRef.current?.id) {
-              isManualTuningRef.current = true;
-              playStationRef.current(closest);
-            }
-          }
+      if (settlePending && !isDragging && !targetRotationRef.current) {
+        if (isFreeSpin()) {
+          settlePending = false;
+        } else if (Math.hypot(velocityX, velocityY) < 0.002) {
+          settleOnNearest();
         }
       }
 
@@ -1492,44 +1228,21 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
 
       if (isFlightModeRef.current) {
         beacon.visible = false;
-        targetBeacon.visible = false;
-      } else if (beacon.visible) {
-        coreMat.opacity = Math.max(0.15, currentBeaconIntensity);
-        core.scale.setScalar(0.7 + 0.3 * currentBeaconIntensity);
-        beamMat.uniforms.uIntensity.value = 0.55 * currentBeaconIntensity;
-        beam.scale.set(
-          0.6 + 0.4 * currentBeaconIntensity,
-          0.5 + 0.5 * currentBeaconIntensity,
-          0.6 + 0.4 * currentBeaconIntensity
-        );
       }
 
       const pulseOrigin = landMat.uniforms.uPulseOrigin.value as THREE.Vector3[];
       const pulseStrength = landMat.uniforms.uPulseStrength.value as number[];
       landMat.uniforms.uPulseTime.value = t;
       const stationOn = stationLayer.visible && beacon.visible;
-      pulseStrength[0] = stationOn ? currentBeaconIntensity : 0;
+      pulseStrength[0] = stationOn ? 1 : 0;
       if (stationOn) pulseOrigin[0].copy(beacon.position).normalize();
-      const candidateOn = stationLayer.visible && targetBeacon.visible;
-      pulseStrength[1] = candidateOn ? targetBeaconIntensity : 0;
-      if (candidateOn) pulseOrigin[1].copy(targetBeacon.position).normalize();
+      pulseStrength[1] = 0;
       const route = isFlightModeRef.current ? activeRouteRef.current : null;
       pulseStrength[2] = route ? 0.8 : 0;
       pulseStrength[3] = route ? 0.8 : 0;
       if (route) {
         pulseOrigin[2].copy(toVector(route.origin.latitude, route.origin.longitude, 1));
         pulseOrigin[3].copy(toVector(route.destination.latitude, route.destination.longitude, 1));
-      }
-
-      if (targetBeacon.visible) {
-        targetCoreMat.opacity = 0.95 * targetBeaconIntensity;
-        targetCore.scale.setScalar(0.7 + 0.4 * targetBeaconIntensity);
-        targetBeamMat.uniforms.uIntensity.value = 0.65 * targetBeaconIntensity;
-        targetBeam.scale.set(
-          0.6 + 0.4 * targetBeaconIntensity,
-          0.4 + 0.6 * targetBeaconIntensity,
-          0.6 + 0.4 * targetBeaconIntensity
-        );
       }
 
       if (
@@ -1749,9 +1462,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
 
     if (beaconRef.current) {
       beaconRef.current.visible = false;
-    }
-    if (targetBeaconRef.current) {
-      targetBeaconRef.current.visible = false;
     }
 
     const N = 120;
@@ -2121,7 +1831,7 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
 
       {!isFlightMode && !isPlannerOpen && (
         <div
-          className={`needle${isTuning ? ' is-tuning' : ''}${candidateStation ? ' is-locking' : ''}`}
+          className={`needle${isTuning ? ' is-tuning' : ''}`}
           aria-hidden="true"
         >
           <svg width="120" height="120" viewBox="-60 -60 120 120">
@@ -2132,14 +1842,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
             <path className="needle-bracket" d="M 20 11 L 20 20 L 11 20" />
             <path className="needle-bracket" d="M -11 20 L -20 20 L -20 11" />
           </svg>
-
-          {candidateStation && (
-            <div className="needle-hint">
-              <span className="needle-hint-dot" />
-              <span className="needle-hint-name">{candidateStation.name}</span>
-              <span className="needle-hint-country">{candidateStation.country}</span>
-            </div>
-          )}
         </div>
       )}
     </>

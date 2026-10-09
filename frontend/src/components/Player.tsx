@@ -189,11 +189,10 @@ export const Player: React.FC<PlayerProps> = ({ onOpenAuth }) => {
           <button
             type="button"
             onClick={openPlanner}
-            className="next-in cursor-pointer hover:opacity-80 transition-opacity bg-transparent border-0 p-0 text-inherit font-inherit text-left inline-flex items-center gap-1"
+            className="next-in next-flight"
             title="Сменить рейс"
-            style={{ color: '#38bdf8' }}
           >
-            рейс <span className="num" style={{ color: '#7dd3fc', fontWeight: 600 }}>{activeRoute?.flight_number}</span>
+            рейс<span className="num">{activeRoute?.flight_number}</span>
           </button>
         )}
       </div>

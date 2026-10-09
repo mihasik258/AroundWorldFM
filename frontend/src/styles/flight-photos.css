@@ -289,14 +289,8 @@
 }
 
 .globe-tip-kind {
-  font-size: 10.5px;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: #5fe0c1;
-}
-
-.globe-tip-kind.is-landmark {
-  color: var(--sky, #63d3f2);
+  font-size: 12px;
+  color: var(--ash);
 }
 
 @media (max-width: 720px) {
