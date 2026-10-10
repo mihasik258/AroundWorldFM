@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Enum, Integer, String
@@ -12,10 +12,8 @@ if TYPE_CHECKING:
     from app.models.identity import UserIdentity
     from app.models.session import UserSession
 
-UTC = timezone.utc
 
-
-class UserRole(str, enum.Enum):
+class UserRole(enum.StrEnum):
     USER = "user"
     ADMIN = "admin"
 
@@ -23,16 +21,17 @@ class UserRole(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
     role: Mapped[UserRole] = mapped_column(
         Enum(
             UserRole,
             values_callable=lambda x: [e.value for e in x],
-            name="user_roles",
-            create_type=False,
+            name="user_role",
             native_enum=False,
+            create_constraint=True,
+            length=16,
         ),
         default=UserRole.USER,
         nullable=False,

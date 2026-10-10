@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, UniqueConstraint
@@ -10,16 +10,14 @@ if TYPE_CHECKING:
     from app.models.station import Station
     from app.models.user import User
 
-UTC = timezone.utc
-
 
 class Favorite(Base):
     """Favorite station."""
 
     __tablename__ = "favorites"
-    __table_args__ = (UniqueConstraint("user_id", "station_id", name="uq_user_station_favorite"),)
+    __table_args__ = (UniqueConstraint("user_id", "station_id", name="uq_favorites_user_station"),)
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )

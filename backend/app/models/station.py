@@ -1,8 +1,9 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -19,18 +20,20 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.favorite import Favorite
 
-UTC = timezone.utc
-
 
 class Station(Base):
     """Radio station."""
 
     __tablename__ = "stations"
     __table_args__ = (
-        Index("idx_stations_tags_gin", "tags", postgresql_using="gin"),
+        Index("ix_stations_tags_gin", "tags", postgresql_using="gin"),
+        CheckConstraint("latitude IS NULL OR latitude BETWEEN -90 AND 90", name="latitude_range"),
+        CheckConstraint(
+            "longitude IS NULL OR longitude BETWEEN -180 AND 180", name="longitude_range"
+        ),
     )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     station_uuid: Mapped[str | None] = mapped_column(
         String(64), unique=True, index=True, nullable=True
     )
@@ -43,6 +46,9 @@ class Station(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     language: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    location_precision: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="exact", server_default="exact"
+    )
 
     tags: Mapped[list[str]] = mapped_column(
         ARRAY(Text), default=list, nullable=False, server_default="{}"
@@ -80,7 +86,7 @@ class StationStream(Base):
 
     __tablename__ = "station_streams"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     station_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("stations.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -97,7 +103,11 @@ class StationStream(Base):
 
     station: Mapped["Station"] = relationship("Station", back_populates="streams")
     health: Mapped["StreamHealth | None"] = relationship(
-        "StreamHealth", back_populates="stream", uselist=False, cascade="all, delete-orphan", lazy="selectin"
+        "StreamHealth",
+        back_populates="stream",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
 
@@ -112,6 +122,8 @@ class StreamHealth(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     response_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     check_fail_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     stream: Mapped["StationStream"] = relationship("StationStream", back_populates="health")
