@@ -1,12 +1,11 @@
 import logging
 import math
-from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.flight import Airport, FlightRoute, UserFlightSession
+from app.models.flight import Airport, FlightRoute
 from app.models.station import Station, StationStream, StreamHealth
 from app.schemas.flight import (
     FlightTuningResponse,
@@ -15,7 +14,6 @@ from app.schemas.flight import (
 from app.services.radio_service import RadioService
 
 logger = logging.getLogger(__name__)
-UTC = timezone.utc
 
 
 INITIAL_AIRPORTS = [
@@ -399,8 +397,8 @@ class FlightService:
         if route_count == 0:
             logger.info("Seeding initial flight routes...")
             for r in INITIAL_ROUTES:
-                orig_id = airport_map.get(r["origin_iata"])
-                dest_id = airport_map.get(r["destination_iata"])
+                orig_id = airport_map.get(str(r["origin_iata"]))
+                dest_id = airport_map.get(str(r["destination_iata"]))
                 if not orig_id or not dest_id:
                     continue
 
@@ -568,7 +566,7 @@ class FlightService:
         cur_alt = cls.calculate_altitude(route.cruising_altitude_m, p)
         dist_from_origin = round(route.distance_km * p, 1)
         dist_to_dest = round(route.distance_km * (1.0 - p), 1)
-        elapsed_min = int(round(route.real_duration_minutes * p))
+        elapsed_min = round(route.real_duration_minutes * p)
         remain_min = max(0, route.real_duration_minutes - elapsed_min)
 
         chosen_station, dist_station_km = await cls.pick_station_with_hysteresis(
@@ -600,75 +598,3 @@ class FlightService:
             region_label=region_label,
             station=station_read,
         )
-
-    @classmethod
-    async def get_or_create_session(
-        cls,
-        db: AsyncSession,
-        route_id: int,
-        session_token: str | None = None,
-        user_id: int | None = None,
-    ) -> UserFlightSession:
-        stmt = select(UserFlightSession).where(UserFlightSession.route_id == route_id)
-        if user_id:
-            stmt = stmt.where(UserFlightSession.user_id == user_id)
-        elif session_token:
-            stmt = stmt.where(UserFlightSession.session_token == session_token)
-        else:
-            stmt = stmt.limit(1)
-
-        stmt = stmt.options(
-            selectinload(UserFlightSession.route).selectinload(FlightRoute.origin),
-            selectinload(UserFlightSession.route).selectinload(FlightRoute.destination),
-        )
-
-        res = await db.execute(stmt)
-        session = res.scalar_one_or_none()
-        if not session:
-            session = UserFlightSession(
-                route_id=route_id,
-                user_id=user_id,
-                session_token=session_token,
-                progress_percent=0.0,
-                playback_speed=1.0,
-                is_paused=False,
-            )
-            db.add(session)
-            await db.commit()
-            await db.refresh(session)
-            session = await cls.get_session_by_id(db, session.id)
-
-        return session
-
-    @classmethod
-    async def get_session_by_id(cls, db: AsyncSession, session_id: int) -> UserFlightSession | None:
-        stmt = (
-            select(UserFlightSession)
-            .options(
-                selectinload(UserFlightSession.route).selectinload(FlightRoute.origin),
-                selectinload(UserFlightSession.route).selectinload(FlightRoute.destination),
-            )
-            .where(UserFlightSession.id == session_id)
-        )
-        res = await db.execute(stmt)
-        return res.scalar_one_or_none()
-
-    @classmethod
-    async def update_session(
-        cls,
-        db: AsyncSession,
-        session_id: int,
-        progress_percent: float,
-        playback_speed: float,
-        is_paused: bool,
-    ) -> UserFlightSession | None:
-        session = await cls.get_session_by_id(db, session_id)
-        if not session:
-            return None
-        session.progress_percent = max(0.0, min(100.0, progress_percent))
-        session.playback_speed = playback_speed
-        session.is_paused = is_paused
-        session.last_active_at = datetime.now(UTC)
-        await db.commit()
-        await db.refresh(session)
-        return session
