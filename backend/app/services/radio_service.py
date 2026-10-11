@@ -1,10 +1,13 @@
 import random
+from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.cache import catalog_cache
+from app.db.session import affected_rows
 from app.models.favorite import Favorite
 from app.models.station import Station, StationStream, StreamHealth
 from app.schemas.station import StationQuery, StationRead, StationStreamRead
@@ -50,6 +53,7 @@ class RadioService:
             latitude=station.latitude,
             longitude=station.longitude,
             language=station.language,
+            location_precision=station.location_precision,
             tags=station.tags if isinstance(station.tags, list) else [],
             codec=primary.codec if primary else "MP3",
             bitrate=primary.bitrate if primary else 128,
@@ -67,12 +71,24 @@ class RadioService:
         query_params: StationQuery,
         only_active: bool = True,
     ) -> list[StationRead]:
-        genres = () if (query_params.genres or "").strip().lower() == "any" else csv_key(query_params.genres)
+        genres = (
+            ()
+            if (query_params.genres or "").strip().lower() == "any"
+            else csv_key(query_params.genres)
+        )
         languages = csv_key(query_params.languages)
         country = (query_params.country or "").strip().lower()
         search = (query_params.search or "").strip().lower()
-        key = ("stations", only_active, genres, languages, country, search,
-               query_params.limit, query_params.offset)
+        key = (
+            "stations",
+            only_active,
+            genres,
+            languages,
+            country,
+            search,
+            query_params.limit,
+            query_params.offset,
+        )
 
         async def load() -> list[StationRead]:
             stmt = (
@@ -93,7 +109,11 @@ class RadioService:
             if search:
                 pattern = f"%{search}%"
                 stmt = stmt.where(or_(Station.name.ilike(pattern), Station.country.ilike(pattern)))
-            stmt = stmt.order_by(Station.name.asc()).offset(query_params.offset).limit(query_params.limit)
+            stmt = (
+                stmt.order_by(Station.name.asc())
+                .offset(query_params.offset)
+                .limit(query_params.limit)
+            )
             result = await db.execute(stmt)
             return [cls._station_to_read(st) for st in result.scalars().all()]
 
@@ -133,6 +153,16 @@ class RadioService:
             .where(Station.id == chosen_id)
         )
         station = (await db.execute(st_stmt)).scalar_one_or_none()
+        return cls._station_to_read(station) if station else None
+
+    @classmethod
+    async def get_station(cls, db: AsyncSession, station_id: int) -> StationRead | None:
+        stmt = (
+            select(Station)
+            .options(selectinload(Station.streams).selectinload(StationStream.health))
+            .where(Station.id == station_id)
+        )
+        station = (await db.execute(stmt)).scalar_one_or_none()
         return cls._station_to_read(station) if station else None
 
     @staticmethod
@@ -179,27 +209,24 @@ class RadioService:
         return [cls._station_to_read(fav.station) for fav in favorites if fav.station]
 
     @classmethod
-    async def add_favorite(cls, db: AsyncSession, user_id: int, station_id: int) -> bool:
-        stmt = select(Favorite).where(
-            Favorite.user_id == user_id, Favorite.station_id == station_id
+    async def add_favorite(cls, db: AsyncSession, user_id: int, station_id: int) -> bool | None:
+        if await db.get(Station, station_id) is None:
+            return None
+        stmt = (
+            pg_insert(Favorite)
+            .values(user_id=user_id, station_id=station_id, created_at=datetime.now(UTC))
+            .on_conflict_do_nothing(constraint="uq_favorites_user_station")
+            .returning(Favorite.id)
         )
-        exists = (await db.execute(stmt)).scalar_one_or_none()
-        if exists:
-            return False
-
-        fav = Favorite(user_id=user_id, station_id=station_id)
-        db.add(fav)
+        inserted = (await db.execute(stmt)).scalar_one_or_none()
         await db.commit()
-        return True
+        return inserted is not None
 
     @classmethod
     async def remove_favorite(cls, db: AsyncSession, user_id: int, station_id: int) -> bool:
-        stmt = select(Favorite).where(
+        stmt = delete(Favorite).where(
             Favorite.user_id == user_id, Favorite.station_id == station_id
         )
-        fav = (await db.execute(stmt)).scalar_one_or_none()
-        if not fav:
-            return False
-        await db.delete(fav)
+        result = await db.execute(stmt)
         await db.commit()
-        return True
+        return affected_rows(result) > 0

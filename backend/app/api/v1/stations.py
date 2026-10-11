@@ -1,12 +1,13 @@
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.core.net import UnsafeURLError, outbound_client
 from app.models.station import Station
 from app.models.user import User
-from app.schemas.station import StationQuery, StationRead
+from app.schemas.station import StationMap, StationQuery, StationRead
 from app.services.now_playing_service import NowPlayingService
 from app.services.radio_service import RadioService
 from app.services.vibe_service import VIBE_LABELS, VIBE_PATTERN, VibeService
@@ -14,6 +15,9 @@ from app.services.vibe_service import VIBE_LABELS, VIBE_PATTERN, VibeService
 router = APIRouter(prefix="/stations", tags=["Станции"])
 
 MAX_EXCLUDED_LANGUAGES = 200
+MAX_EXCLUDED_IDS = 100
+MAP_CACHE_SECONDS = 120
+STREAM_TIMEOUT = httpx.Timeout(10.0, read=30.0)
 
 
 def parse_excluded_languages(raw: str | None) -> list[str] | None:
@@ -40,7 +44,11 @@ async def get_next_vibe_station(
     db: AsyncSession = Depends(get_db),
 ):
     clean_exclude_langs = parse_excluded_languages(exclude_languages)
-    clean_exclude_ids = [int(i.strip()) for i in exclude_ids.split(",") if i.strip().isdigit()] if exclude_ids else None
+    clean_exclude_ids = (
+        [int(i) for i in exclude_ids.split(",")[:MAX_EXCLUDED_IDS] if i.strip().isdigit()]
+        if exclude_ids
+        else None
+    )
 
     station = await VibeService.get_next_station(
         db=db,
@@ -75,6 +83,24 @@ async def get_vibe_stations(
 
 
 @router.get(
+    "/vibe/map",
+    response_model=StationMap,
+    summary="Точки станций вайба для глобуса",
+)
+async def get_vibe_map(
+    response: Response,
+    vibe: str = Query("focus", pattern=VIBE_PATTERN, description="Вайб"),
+    exclude_languages: str | None = Query(None, description="Исключаемые языки"),
+    db: AsyncSession = Depends(get_db),
+):
+    points = await VibeService.get_vibe_points(
+        db=db, vibe=vibe, exclude_languages=parse_excluded_languages(exclude_languages)
+    )
+    response.headers["Cache-Control"] = f"public, max-age={MAP_CACHE_SECONDS}"
+    return StationMap(stations=points)
+
+
+@router.get(
     "/vibe/languages",
     summary="Языки с числом станций",
 )
@@ -87,9 +113,7 @@ async def get_available_languages(db: AsyncSession = Depends(get_db)):
     summary="Вайбы",
 )
 async def get_supported_vibes():
-    return [
-        {"id": k, "label": v} for k, v in VIBE_LABELS.items()
-    ]
+    return [{"id": k, "label": v} for k, v in VIBE_LABELS.items()]
 
 
 @router.get(
@@ -176,6 +200,8 @@ async def add_to_favorites(
     db: AsyncSession = Depends(get_db),
 ):
     added = await RadioService.add_favorite(db, current_user.id, station_id)
+    if added is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Станция не найдена")
     if not added:
         return {"status": "ok", "message": "Уже в избранном"}
     return {"status": "ok", "message": "Добавлено"}
@@ -200,46 +226,60 @@ async def remove_from_favorites(
 
 
 @router.get(
+    "/{station_id}",
+    response_model=StationRead,
+    summary="Станция",
+)
+async def get_station(station_id: int, db: AsyncSession = Depends(get_db)):
+    station = await RadioService.get_station(db, station_id)
+    if station is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Станция не найдена")
+    return station
+
+
+@router.get(
     "/{station_id}/stream",
     summary="Аудиопоток",
 )
 async def proxy_station_stream(station_id: int, db: AsyncSession = Depends(get_db)):
     station = await db.get(Station, station_id)
     if not station or not station.primary_stream:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Поток не найден",
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Поток не найден")
+
+    client = outbound_client(STREAM_TIMEOUT, headers={"Icy-MetaData": "0"})
+    try:
+        upstream = await client.send(
+            client.build_request("GET", station.primary_stream.stream_url), stream=True
         )
+    except (httpx.HTTPError, UnsafeURLError, OSError) as exc:
+        await client.aclose()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Поток недоступен"
+        ) from exc
 
-    stream_url = station.primary_stream.stream_url
-    client = httpx.AsyncClient(timeout=15.0, follow_redirects=True, trust_env=False)
+    if upstream.status_code != 200:
+        await upstream.aclose()
+        await client.aclose()
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Поток недоступен")
 
-    async def stream_generator():
+    content_type = upstream.headers.get("content-type", "audio/mpeg").split(";")[0].strip()
+    if not content_type.startswith(("audio/", "application/ogg", "application/octet-stream")):
+        content_type = "audio/mpeg"
+
+    async def body():
         try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                "Icy-MetaData": "0",
-            }
-            async with client.stream("GET", stream_url, headers=headers) as resp:
-                if resp.status_code not in (200, 206):
-                    yield b""
-                    return
-                async for chunk in resp.aiter_bytes(chunk_size=4096):
-                    yield chunk
-        except Exception:
-            yield b""
+            async for chunk in upstream.aiter_bytes(chunk_size=8192):
+                yield chunk
+        except httpx.HTTPError:
+            return
         finally:
+            await upstream.aclose()
             await client.aclose()
 
     return StreamingResponse(
-        stream_generator(),
-        media_type="audio/mpeg",
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-            "Accept-Ranges": "bytes",
-        },
+        body(),
+        media_type=content_type,
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
     )
 
 
