@@ -102,8 +102,14 @@ async def test_vibe_catalogue_is_cached_and_invalidated(
     created = await client.post(
         f"{API}/admin/stations",
         headers=bearer(admin),
-        json={"name": "Jazz Cafe", "stream_url": "https://example.com/jazz.mp3",
-              "country": "France", "latitude": 48.85, "longitude": 2.35, "tags": ["jazz"]},
+        json={
+            "name": "Jazz Cafe",
+            "stream_url": "https://example.com/jazz.mp3",
+            "country": "France",
+            "latitude": 48.85,
+            "longitude": 2.35,
+            "tags": ["jazz"],
+        },
     )
     assert created.status_code == 201
 
@@ -157,3 +163,25 @@ async def test_cache_does_not_store_value_computed_before_clear():
 
     assert await cache.get_or_set("k", stale) == "stale"
     assert await cache.get_or_set("k", fresh) == "fresh"
+
+
+@pytest.mark.asyncio
+async def test_admin_station_language_must_be_known(client: AsyncClient, create_users):
+    admin = await login(client, "adminuser", "AdminPassword123!")
+    payload = {
+        "name": "Lingo",
+        "stream_url": "https://example.com/lingo.mp3",
+        "country": "Chile",
+        "tags": ["jazz"],
+    }
+    bad = await client.post(
+        f"{API}/admin/stations", headers=bearer(admin), json={**payload, "language": "willemstad"}
+    )
+    assert bad.status_code == 422
+    ok = await client.post(
+        f"{API}/admin/stations",
+        headers=bearer(admin),
+        json={**payload, "language": "Español Chile"},
+    )
+    assert ok.status_code == 201
+    assert ok.json()["language"] == "spanish"
