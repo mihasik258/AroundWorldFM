@@ -8,7 +8,11 @@ from tests.helpers import API, bearer, login
 
 ADMIN_ENDPOINTS = [
     ("GET", "/admin/stats", None),
-    ("POST", "/admin/stations", {"name": "X", "stream_url": "https://example.com/x.mp3", "country": "X"}),
+    (
+        "POST",
+        "/admin/stations",
+        {"name": "X", "stream_url": "https://example.com/x.mp3", "country": "X"},
+    ),
     ("PATCH", "/admin/stations/1", {"name": "Y"}),
     ("DELETE", "/admin/stations/1", None),
     ("POST", "/admin/trigger-stream-check", None),
@@ -26,14 +30,14 @@ async def _admin(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("method,path,body", ADMIN_ENDPOINTS)
+@pytest.mark.parametrize(("method", "path", "body"), ADMIN_ENDPOINTS)
 async def test_admin_endpoints_reject_guest(client: AsyncClient, method, path, body):
     res = await client.request(method, f"{API}{path}", json=body)
     assert res.status_code == 401
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("method,path,body", ADMIN_ENDPOINTS)
+@pytest.mark.parametrize(("method", "path", "body"), ADMIN_ENDPOINTS)
 async def test_admin_endpoints_reject_user(client: AsyncClient, create_users, method, path, body):
     user = await login(client)
     res = await client.request(method, f"{API}{path}", json=body, headers=bearer(user))
@@ -42,7 +46,13 @@ async def test_admin_endpoints_reject_user(client: AsyncClient, create_users, me
 
 
 @pytest.mark.asyncio
-async def test_admin_can_manage_stations(client: AsyncClient, create_users):
+async def test_admin_can_manage_stations(client: AsyncClient, create_users, monkeypatch):
+    calls = []
+
+    async def fake_check(db):
+        calls.append(db)
+
+    monkeypatch.setattr("app.api.v1.admin.run_stream_health_check", fake_check)
     headers = bearer(await _admin(client))
 
     assert (await client.get(f"{API}/admin/stats", headers=headers)).status_code == 200
@@ -61,12 +71,16 @@ async def test_admin_can_manage_stations(client: AsyncClient, create_users):
     assert updated.status_code == 200
     assert updated.json()["name"] == "Admin FM 2"
 
-    assert (await client.delete(f"{API}/admin/stations/{station_id}", headers=headers)).status_code == 200
-    assert (await client.post(f"{API}/admin/trigger-stream-check", headers=headers)).status_code == 200
+    assert (
+        await client.delete(f"{API}/admin/stations/{station_id}", headers=headers)
+    ).status_code == 200
+    assert (
+        await client.post(f"{API}/admin/trigger-stream-check", headers=headers)
+    ).status_code == 202
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("method,path", USER_ENDPOINTS)
+@pytest.mark.parametrize(("method", "path"), USER_ENDPOINTS)
 async def test_user_endpoints_require_login(client: AsyncClient, create_users, method, path):
     assert (await client.request(method, f"{API}{path}")).status_code == 401
 
@@ -78,8 +92,12 @@ async def test_user_endpoints_require_login(client: AsyncClient, create_users, m
 async def test_registration_always_gives_user_role(client: AsyncClient):
     res = await client.post(
         f"{API}/auth/register",
-        json={"email": "r@example.com", "username": "roleseeker", "password": "Password123!",
-              "role": "admin"},
+        json={
+            "email": "r@example.com",
+            "username": "roleseeker",
+            "password": "Password123!",
+            "role": "admin",
+        },
     )
     assert res.status_code == 201
     assert res.json()["role"] == "user"
@@ -99,7 +117,9 @@ async def test_role_claim_in_token_is_ignored(client: AsyncClient, create_users)
 
 
 @pytest.mark.asyncio
-async def test_demoted_admin_loses_access_immediately(client: AsyncClient, create_users, db_session):
+async def test_demoted_admin_loses_access_immediately(
+    client: AsyncClient, create_users, db_session
+):
     headers = bearer(await _admin(client))
     assert (await client.get(f"{API}/admin/stats", headers=headers)).status_code == 200
 

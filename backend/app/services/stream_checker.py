@@ -1,100 +1,123 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+import time
+from datetime import UTC, datetime, timedelta
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.cache import catalog_cache
 from app.core.config import settings
+from app.core.net import UnsafeURLError, outbound_client
 from app.models.station import StationStream, StreamHealth
 
-UTC = timezone.utc
 logger = logging.getLogger(__name__)
 
-
-STREAM_ERRORS = (httpx.HTTPError, asyncio.TimeoutError, OSError, ValueError)
+FAILURES_BEFORE_INACTIVE = 2
+STREAM_ERRORS = (httpx.HTTPError, asyncio.TimeoutError, OSError, UnsafeURLError)
 
 
 async def check_single_stream(client: httpx.AsyncClient, stream_url: str) -> bool:
     try:
-        try:
-            resp = await client.head(
-                stream_url, timeout=settings.STREAM_CHECK_TIMEOUT_SECONDS, follow_redirects=True
-            )
-            if resp.status_code in (200, 206):
-                return True
-        except STREAM_ERRORS:
-            pass
-
-        async with client.stream(
-            "GET", stream_url, timeout=settings.STREAM_CHECK_TIMEOUT_SECONDS, follow_redirects=True
-        ) as resp:
-            if resp.status_code in (200, 206):
-                async for _ in resp.aiter_bytes(chunk_size=512):
+        async with client.stream("GET", stream_url) as resp:
+            if resp.status_code not in (200, 206):
+                return False
+            async for chunk in resp.aiter_bytes(chunk_size=512):
+                if chunk:
                     return True
         return False
     except STREAM_ERRORS:
         return False
 
 
-async def check_and_update_stream(
-    client: httpx.AsyncClient,
-    semaphore: asyncio.Semaphore,
-    stream: StationStream,
-    db: AsyncSession,
-) -> tuple[int, bool]:
+async def _probe(
+    client: httpx.AsyncClient, semaphore: asyncio.Semaphore, stream: StationStream
+) -> tuple[StationStream, bool, int]:
     async with semaphore:
-        start_t = asyncio.get_event_loop().time()
-        is_alive = await check_single_stream(client, stream.stream_url)
-        duration_ms = int((asyncio.get_event_loop().time() - start_t) * 1000)
-
-        health = stream.health
-        if not health:
-            health = StreamHealth(stream_id=stream.id)
-            db.add(health)
-
-        health.last_checked_at = datetime.now(UTC)
-        health.response_time_ms = duration_ms if is_alive else None
-        if is_alive:
-            health.is_active = True
-            health.check_fail_count = 0
-        else:
-            health.check_fail_count += 1
-            if health.check_fail_count >= 2:
-                health.is_active = False
-                logger.warning(f"Stream inactive: {stream.stream_url}")
-        return stream.id, is_alive
+        started = time.perf_counter()
+        alive = await check_single_stream(client, stream.stream_url)
+        return stream, alive, int((time.perf_counter() - started) * 1000)
 
 
-async def run_stream_health_check(db: AsyncSession) -> None:
-    from sqlalchemy.orm import selectinload
+def _apply_result(db: AsyncSession, stream: StationStream, alive: bool, duration_ms: int) -> None:
+    health = stream.health
+    if health is None:
+        health = StreamHealth(stream_id=stream.id, check_fail_count=0, is_active=True)
+        db.add(health)
+    health.last_checked_at = datetime.now(UTC)
+    if alive:
+        health.is_active = True
+        health.check_fail_count = 0
+        health.response_time_ms = duration_ms
+    else:
+        health.check_fail_count += 1
+        health.response_time_ms = None
+        if health.check_fail_count >= FAILURES_BEFORE_INACTIVE:
+            health.is_active = False
 
-    stmt = select(StationStream).options(selectinload(StationStream.health))
-    result = await db.execute(stmt)
-    streams = result.scalars().all()
 
+def due_streams_query(batch_size: int, now: datetime) -> Select[tuple[StationStream]]:
+    active_due = now - timedelta(hours=settings.STREAM_RECHECK_ACTIVE_HOURS)
+    inactive_due = now - timedelta(hours=settings.STREAM_RECHECK_INACTIVE_HOURS)
+    return (
+        select(StationStream)
+        .outerjoin(StreamHealth, StreamHealth.stream_id == StationStream.id)
+        .options(selectinload(StationStream.health))
+        .where(
+            or_(
+                StreamHealth.stream_id.is_(None),
+                StreamHealth.last_checked_at.is_(None),
+                and_(StreamHealth.is_active.is_(True), StreamHealth.last_checked_at < active_due),
+                and_(
+                    StreamHealth.is_active.is_(False), StreamHealth.last_checked_at < inactive_due
+                ),
+            )
+        )
+        .order_by(StreamHealth.last_checked_at.asc().nulls_first(), StationStream.id)
+        .limit(batch_size)
+    )
+
+
+async def run_due_stream_checks(db: AsyncSession) -> dict[str, int]:
+    stmt = due_streams_query(settings.STREAM_CHECK_BATCH_SIZE, datetime.now(UTC))
+    streams = (await db.execute(stmt)).scalars().all()
+    return await _check(db, list(streams))
+
+
+async def run_stream_health_check(db: AsyncSession) -> dict[str, int]:
+    streams = (
+        (await db.execute(select(StationStream).options(selectinload(StationStream.health))))
+        .scalars()
+        .all()
+    )
+    return await _check(db, list(streams))
+
+
+async def _check(db: AsyncSession, streams: list[StationStream]) -> dict[str, int]:
     if not streams:
-        return
+        return {"checked": 0, "alive": 0}
 
-    logger.info(f"Checking {len(streams)} streams")
-    semaphore = asyncio.Semaphore(10)
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; AroundFM-HealthCheck/2.0)",
-        "Icy-MetaData": "1",
-    }
+    logger.info("Checking %d streams", len(streams))
+    semaphore = asyncio.Semaphore(settings.STREAM_CHECK_CONCURRENCY)
+    async with outbound_client(
+        settings.STREAM_CHECK_TIMEOUT_SECONDS, headers={"Icy-MetaData": "0"}
+    ) as client:
+        results = await asyncio.gather(
+            *(_probe(client, semaphore, s) for s in streams), return_exceptions=True
+        )
 
-    async with httpx.AsyncClient(headers=headers, trust_env=False) as client:
-        tasks = [check_and_update_stream(client, semaphore, s, db) for s in streams]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+    alive = 0
+    for result in results:
+        if isinstance(result, BaseException):
+            logger.error("Stream probe crashed: %r", result)
+            continue
+        stream, ok, duration_ms = result
+        alive += ok
+        _apply_result(db, stream, ok, duration_ms)
 
     await db.commit()
     catalog_cache.clear()
-
-    errors = [r for r in results if isinstance(r, BaseException)]
-    if errors:
-        logger.error(f"Health check errors: {len(errors)}, first: {errors[0]!r}")
-
-    alive_count = sum(1 for r in results if isinstance(r, tuple) and r[1])
-    logger.info(f"Active streams: {alive_count}/{len(streams)}")
+    logger.info("Active streams: %d/%d", alive, len(streams))
+    return {"checked": len(streams), "alive": alive}
