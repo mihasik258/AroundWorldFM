@@ -1,14 +1,26 @@
+import logging
+
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.cookies import clear_refresh_cookie, set_refresh_cookie
-from app.api.deps import AuthContext, get_auth_context, get_db
+from app.api.cookies import clear_refresh_cookie, set_session_cookie
+from app.api.deps import AuthContext, client_ip, get_auth_context, get_db
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.schemas.auth import TokenResponse, UserLogin, UserRegister
+from app.schemas.auth import (
+    ProvidersResponse,
+    TelegramAuthRequest,
+    TelegramProvider,
+    TokenResponse,
+    UserLogin,
+    UserRegister,
+)
 from app.schemas.session import UserSessionRead
 from app.schemas.user import UserRead
 from app.services.auth_service import AuthService
+from app.services.telegram_service import TelegramService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Аутентификация"])
 
@@ -42,14 +54,37 @@ async def login(
     db: AsyncSession = Depends(get_db),
     user_agent: str | None = Header(None),
 ):
-    ip_address = request.client.host if request.client else None
     issued = await AuthService.authenticate_user(
         db=db,
         login_data=login_data,
-        ip_address=ip_address,
+        ip_address=client_ip(request),
         user_agent=user_agent,
     )
-    set_refresh_cookie(response, issued.refresh_token, issued.refresh_expires_at)
+    set_session_cookie(response, issued)
+    return issued.response
+
+
+@router.get("/providers", response_model=ProvidersResponse, summary="Способы входа")
+async def get_providers():
+    return ProvidersResponse(
+        telegram=TelegramProvider(
+            enabled=settings.telegram_enabled,
+            bot_username=settings.TELEGRAM_BOT_USERNAME,
+        ),
+    )
+
+
+@router.post("/telegram", response_model=TokenResponse, summary="Вход через Telegram")
+@limiter.limit(settings.RATE_LIMIT_LOGIN)
+async def telegram_login(
+    request: Request,
+    response: Response,
+    payload: TelegramAuthRequest,
+    db: AsyncSession = Depends(get_db),
+    user_agent: str | None = Header(None),
+):
+    issued = await TelegramService.login(db, payload.init_data, client_ip(request), user_agent)
+    set_session_cookie(response, issued)
     return issued.response
 
 
@@ -69,8 +104,7 @@ async def refresh_token(
             detail="Требуется вход",
         )
     issued = await AuthService.refresh_access_token(db, refresh_token)
-    if issued.refresh_token:
-        set_refresh_cookie(response, issued.refresh_token, issued.refresh_expires_at)
+    set_session_cookie(response, issued)
     return issued.response
 
 
@@ -136,7 +170,5 @@ async def revoke_all_sessions(
     ctx: AuthContext = Depends(get_auth_context),
     db: AsyncSession = Depends(get_db),
 ):
-    count = await AuthService.revoke_all_sessions(
-        db, ctx.user.id, except_session_id=ctx.session.id
-    )
+    count = await AuthService.revoke_all_sessions(db, ctx.user.id, except_session_id=ctx.session.id)
     return {"status": "ok", "message": f"Отозвано сессий: {count}"}

@@ -1,14 +1,18 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from fastapi import Response
 
 from app.core.config import settings
 
+if TYPE_CHECKING:
+    from app.services.auth_service import IssuedTokens
+
 REFRESH_COOKIE_PATH = f"{settings.API_V1_STR}/auth"
 
 
 def set_refresh_cookie(response: Response, token: str, expires_at: datetime) -> None:
-    max_age = max(0, int((expires_at - datetime.now(timezone.utc)).total_seconds()))
+    max_age = max(0, int((expires_at - datetime.now(UTC)).total_seconds()))
     response.set_cookie(
         key=settings.REFRESH_COOKIE_NAME,
         value=token,
@@ -18,6 +22,11 @@ def set_refresh_cookie(response: Response, token: str, expires_at: datetime) -> 
         secure=settings.COOKIE_SECURE,
         samesite="strict",
     )
+
+
+def set_session_cookie(response: Response, issued: "IssuedTokens") -> None:
+    if issued.refresh_token:
+        set_refresh_cookie(response, issued.refresh_token, issued.refresh_expires_at)
 
 
 def clear_refresh_cookie(response: Response) -> None:

@@ -1,17 +1,18 @@
 import hashlib
 import hmac
+import json
 import os
+import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import parse_qsl
 
 import anyio
 import bcrypt
 import jwt
 
 from app.core.config import settings
-
-UTC = timezone.utc
 
 _bcrypt_limiter = anyio.CapacityLimiter(max(1, (os.cpu_count() or 2) // 2))
 
@@ -37,7 +38,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         peppered = _apply_pepper(plain_password)
         return bcrypt.checkpw(peppered, hashed_password.encode("utf-8"))
-    except Exception:
+    except ValueError:
         return False
 
 
@@ -102,4 +103,49 @@ def create_refresh_token(
 
 
 def decode_token(token: str) -> dict[str, Any]:
-    return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    return jwt.decode(
+        token,
+        settings.SECRET_KEY,
+        algorithms=[settings.ALGORITHM],
+        options={"require": ["exp", "iat", "sub", "type"]},
+    )
+
+
+class TelegramAuthError(Exception):
+    pass
+
+
+def verify_telegram_init_data(
+    init_data: str, bot_token: str, max_age_seconds: int, now: float | None = None
+) -> dict[str, Any]:
+    pairs = parse_qsl(init_data, keep_blank_values=True, strict_parsing=False)
+    fields = dict(pairs)
+    if len(fields) != len(pairs):
+        raise TelegramAuthError("duplicate fields")
+    received_hash = fields.pop("hash", None)
+    if not received_hash:
+        raise TelegramAuthError("missing hash")
+
+    data_check_string = "\n".join(f"{k}={fields[k]}" for k in sorted(fields))
+    secret = hmac.new(b"WebAppData", bot_token.encode("utf-8"), hashlib.sha256).digest()
+    expected = hmac.new(secret, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, received_hash):
+        raise TelegramAuthError("bad signature")
+
+    try:
+        auth_date = int(fields["auth_date"])
+        user = json.loads(fields["user"])
+        user_id = int(user["id"])
+    except (KeyError, ValueError, TypeError) as exc:
+        raise TelegramAuthError("malformed payload") from exc
+
+    current = time.time() if now is None else now
+    if auth_date > current + 60 or current - auth_date > max_age_seconds:
+        raise TelegramAuthError("expired")
+
+    return {
+        "id": user_id,
+        "username": user.get("username"),
+        "first_name": user.get("first_name"),
+        "last_name": user.get("last_name"),
+    }

@@ -1,10 +1,12 @@
 import hashlib
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
+import jwt
 from fastapi import HTTPException, status
-from sqlalchemy import delete, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,12 +19,12 @@ from app.core.security import (
     verify_against_dummy,
     verify_password_async,
 )
-from app.models.identity import UserIdentity
+from app.db.session import affected_rows
+from app.models.identity import AuthProvider, UserIdentity
 from app.models.session import UserSession
 from app.models.user import User, UserRole
 from app.schemas.auth import TokenResponse, UserLogin, UserRegister
 
-UTC = timezone.utc
 logger = logging.getLogger(__name__)
 
 
@@ -85,13 +87,14 @@ _SESSION_GONE = HTTPException(
 class AuthService:
     @staticmethod
     async def register_user(db: AsyncSession, register_data: UserRegister) -> User:
+        email = register_data.email.lower()
         stmt = select(User).where(
-            (User.email == register_data.email) | (User.username == register_data.username)
+            (func.lower(User.email) == email)
+            | (func.lower(User.username) == register_data.username.lower())
         )
-        result = await db.execute(stmt)
-        existing = result.scalar_one_or_none()
+        existing = (await db.execute(stmt)).scalars().first()
         if existing:
-            if existing.email == register_data.email:
+            if existing.email and existing.email.lower() == email:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Email уже зарегистрирован",
@@ -101,24 +104,28 @@ class AuthService:
                 detail="Имя пользователя уже занято",
             )
 
-        hashed = await hash_password_async(register_data.password)
         new_user = User(
-            email=register_data.email,
+            email=email,
             username=register_data.username,
             role=UserRole.USER,
             is_active=True,
         )
-        db.add(new_user)
-        await db.flush()
-
-        identity = UserIdentity(
-            user_id=new_user.id,
-            provider="password",
-            provider_uid=new_user.username,
-            secret_hash=hashed,
+        new_user.identities.append(
+            UserIdentity(
+                provider=AuthProvider.PASSWORD,
+                provider_uid=register_data.username,
+                secret_hash=await hash_password_async(register_data.password),
+            )
         )
-        db.add(identity)
-        await db.commit()
+        db.add(new_user)
+        try:
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Имя пользователя или email уже заняты",
+            ) from exc
         await db.refresh(new_user)
         return new_user
 
@@ -129,15 +136,20 @@ class AuthService:
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> IssuedTokens:
+        login = login_data.login.strip()
         stmt = (
             select(User)
             .options(selectinload(User.identities))
-            .where((User.username == login_data.login) | (User.email == login_data.login))
+            .where(
+                (func.lower(User.username) == login.lower())
+                | (func.lower(User.email) == login.lower())
+            )
         )
-        result = await db.execute(stmt)
-        user = result.scalar_one_or_none()
+        user = (await db.execute(stmt)).scalars().first()
         pwd_identity = (
-            next((i for i in user.identities if i.provider == "password"), None) if user else None
+            next((i for i in user.identities if i.provider == AuthProvider.PASSWORD), None)
+            if user
+            else None
         )
 
         if not pwd_identity or not pwd_identity.secret_hash:
@@ -146,13 +158,22 @@ class AuthService:
         else:
             password_ok = await verify_password_async(login_data.password, pwd_identity.secret_hash)
 
-        if not password_ok:
+        if not user or not password_ok:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Неверный логин или пароль",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        return await AuthService.start_session(db, user, ip_address, user_agent)
+
+    @staticmethod
+    async def start_session(
+        db: AsyncSession,
+        user: User,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> IssuedTokens:
         if not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -166,7 +187,7 @@ class AuthService:
             refresh_token_hash=hash_token(refresh_token),
             device_name=detect_device_name(user_agent),
             ip_address=ip_address,
-            user_agent=user_agent,
+            user_agent=user_agent[:512] if user_agent else None,
             expires_at=expires_at,
             is_revoked=False,
         )
@@ -181,11 +202,11 @@ class AuthService:
     async def refresh_access_token(db: AsyncSession, refresh_token: str) -> IssuedTokens:
         try:
             payload = decode_token(refresh_token)
-        except Exception:
+        except jwt.PyJWTError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Недействительный токен",
-            )
+            ) from exc
 
         if payload.get("type") != "refresh":
             raise HTTPException(
@@ -193,7 +214,13 @@ class AuthService:
                 detail="Неверный тип токена",
             )
 
-        user_id = int(payload["sub"])
+        try:
+            user_id = int(payload["sub"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Недействительный токен",
+            ) from exc
         token_hash = hash_token(refresh_token)
         now = datetime.now(UTC)
 
@@ -230,7 +257,7 @@ class AuthService:
 
             session.is_revoked = True
             await db.commit()
-            logger.warning(f"Refresh token reuse, session {session.id} revoked")
+            logger.warning("Refresh token reuse, session %s revoked", session.id)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Повторное использование токена",
@@ -262,7 +289,7 @@ class AuthService:
         )
         result = await db.execute(stmt)
         await db.commit()
-        return result.rowcount > 0
+        return affected_rows(result) > 0
 
     @staticmethod
     async def revoke_session(db: AsyncSession, user_id: int, session_id: int) -> bool:
@@ -291,7 +318,7 @@ class AuthService:
             stmt = stmt.where(UserSession.id != except_session_id)
         result = await db.execute(stmt.values(is_revoked=True))
         await db.commit()
-        return result.rowcount
+        return affected_rows(result)
 
     @staticmethod
     async def get_user_sessions(db: AsyncSession, user_id: int) -> list[UserSession]:
@@ -314,4 +341,4 @@ class AuthService:
         )
         result = await db.execute(stmt)
         await db.commit()
-        return result.rowcount
+        return affected_rows(result)
