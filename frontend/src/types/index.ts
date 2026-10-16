@@ -1,16 +1,40 @@
 export type UserRole = 'user' | 'admin';
 
+export type AuthProviderId = 'password' | 'telegram';
+
+export interface UserIdentity {
+  provider: AuthProviderId;
+  display_name: string | null;
+  created_at: string;
+}
+
 export interface User {
   id: number;
-  email: string;
+  email: string | null;
   username: string;
   role: UserRole;
   is_active: boolean;
   created_at: string;
+  auth_providers: AuthProviderId[];
+  identities: UserIdentity[];
+}
+
+export interface AuthProviders {
+  telegram: { enabled: boolean; bot_username: string | null };
+}
+
+export interface NowPlaying {
+  station_id: number;
+  has_track: boolean;
+  raw_title: string | null;
+  artist: string | null;
+  title: string | null;
+  spotify_url: string | null;
 }
 
 export interface UserSession {
   id: number;
+  device_name?: string | null;
   ip_address: string | null;
   user_agent: string | null;
   created_at: string;
@@ -30,15 +54,19 @@ export interface RadioStation {
   latitude?: number | null;
   longitude?: number | null;
   language?: string | null;
-  tags: string;
-  vibes?: string;
+  tags: string[];
+  location_precision?: 'exact' | 'country';
   codec: string;
   bitrate: number;
   is_active: boolean;
   last_checked_at?: string | null;
   created_at: string;
-  tag_list: string[];
-  vibe_list?: string[];
+}
+
+export interface StationPoint {
+  id: number;
+  latitude: number;
+  longitude: number;
 }
 
 export interface SystemStats {
