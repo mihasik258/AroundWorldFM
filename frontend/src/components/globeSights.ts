@@ -352,7 +352,7 @@ export const createSightMarker = (landmark: Landmark, surface: THREE.Vector3): S
 
   const inner = new THREE.Group();
   group.add(inner);
-  let tipHeight = 1;
+  let tipHeight: number;
   const build = MODELS[landmark.id];
 
   if (build) {

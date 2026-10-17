@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { usePlayer } from '../context/PlayerContext';
 import { useFlight, slerpLatLon, calculateFlightAltitude } from '../context/FlightContext';
-import { RadioStation } from '../types';
+import { RadioStation, StationPoint } from '../types';
 import { CITIES } from '../data/cities';
 import { LANDMARKS } from '../data/landmarks';
 import { formatClock, formatDuration, formatKm, landmarksAlongRoute } from '../utils/geo';
@@ -11,7 +11,7 @@ import { SightMarker, createSightMarker, pointAlong, styleSightMarker } from './
 import { PhotoPin } from './FlightPhotos';
 
 interface GlobeProps {
-  stations?: RadioStation[];
+  stations?: StationPoint[];
 }
 
 const COUNTRY_COORDS: Record<string, { lat: number; lng: number }> = {
@@ -80,20 +80,26 @@ const solarPosition = (now: Date) => {
   return { lat, lon };
 };
 
-const isNightAt = (lat: number, lon: number, sun: { lat: number; lon: number }) => {
+const sunHeight = (lat: number, lon: number, sun: { lat: number; lon: number }) => {
   const rad = Math.PI / 180;
   return (
     Math.sin(lat * rad) * Math.sin(sun.lat * rad) +
-      Math.cos(lat * rad) * Math.cos(sun.lat * rad) * Math.cos((lon - sun.lon) * rad) <
-    0
+    Math.cos(lat * rad) * Math.cos(sun.lat * rad) * Math.cos((lon - sun.lon) * rad)
   );
 };
 
-const stationCoords = (st: RadioStation) => {
+const nightness = (lat: number, lon: number, sun: { lat: number; lon: number }) => {
+  const t = Math.min(1, Math.max(0, (0.08 - sunHeight(lat, lon, sun)) / 0.26));
+  return t * t * (3 - 2 * t);
+};
+
+type Locatable = { latitude?: number | null; longitude?: number | null; country?: string };
+
+const stationCoords = (st: Locatable) => {
   let lat = st.latitude;
   let lon = st.longitude;
   if (lat == null || lon == null) {
-    const fb = COUNTRY_COORDS[st.country];
+    const fb = st.country ? COUNTRY_COORDS[st.country] : undefined;
     if (fb) {
       lat = fb.lat;
       lon = fb.lng;
@@ -141,8 +147,8 @@ const createAirportMarker = (iata: string, isDestination: boolean): THREE.Group 
   const ctx = canvas.getContext('2d')!;
 
   ctx.fillStyle = isDestination ? '#1c1917' : '#082f49';
-  if ((ctx as any).roundRect) {
-    (ctx as any).roundRect(6, 6, 148, 68, 14);
+  if (ctx.roundRect) {
+    ctx.roundRect(6, 6, 148, 68, 14);
   } else {
     ctx.rect(6, 6, 148, 68);
   }
@@ -313,7 +319,7 @@ const createCodeSprite = (code: string, color: string) => {
   canvas.height = 48;
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = 'rgba(7, 10, 16, 0.82)';
-  if ((ctx as any).roundRect) (ctx as any).roundRect(4, 4, 120, 40, 8);
+  if (ctx.roundRect) ctx.roundRect(4, 4, 120, 40, 8);
   else ctx.rect(4, 4, 120, 40);
   ctx.fill();
   ctx.strokeStyle = color;
@@ -419,6 +425,30 @@ const createLandMaterial = () =>
     depthWrite: false,
   });
 
+interface LatLon {
+  latitude: number;
+  longitude: number;
+}
+
+type GeoGeometry =
+  | { type: 'Polygon'; coordinates: number[][][] }
+  | { type: 'MultiPolygon'; coordinates: number[][][][] }
+  | { type: string; coordinates: unknown };
+
+interface GeoFeature {
+  geometry: GeoGeometry | null;
+}
+
+interface GeoCollection {
+  features: GeoFeature[];
+}
+
+const FRAME_MS = 1000 / 60;
+const SNAP_EASE = 0.08;
+const INERTIA_DECAY = 0.95;
+
+type NeedlePhase = 'idle' | 'tuning' | 'locking';
+
 type HoverTarget =
   | { kind: 'route'; id: number }
   | { kind: 'city'; code: string }
@@ -427,14 +457,15 @@ type HoverTarget =
 const sameTarget = (a: HoverTarget | null, b: HoverTarget | null) => {
   if (!a || !b) return a === b;
   if (a.kind !== b.kind) return false;
-  if (a.kind === 'route') return a.id === (b as any).id;
-  if (a.kind === 'city') return a.code === (b as any).code;
-  return a.id === (b as any).id;
+  if (a.kind === 'route' && b.kind === 'route') return a.id === b.id;
+  if (a.kind === 'city' && b.kind === 'city') return a.code === b.code;
+  if (a.kind === 'sight' && b.kind === 'sight') return a.id === b.id;
+  return false;
 };
 
 export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { currentStation, playStation } = usePlayer();
+  const { currentStation, playStationById } = usePlayer();
   const {
     isFlightMode,
     activeRoute,
@@ -456,8 +487,9 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     developingLandmarkId,
   } = useFlight();
 
-  const [geoData, setGeoData] = useState<any | null>(null);
-  const [isTuning, setIsTuning] = useState(false);
+  const [geoData, setGeoData] = useState<GeoCollection | null>(null);
+  const [needle, setNeedleState] = useState<NeedlePhase>('idle');
+  const needleRef = useRef<NeedlePhase>('idle');
   const [sunTick, setSunTick] = useState(0);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -529,12 +561,12 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
   const currentCoordsRef = useRef(currentCoords);
   currentCoordsRef.current = currentCoords;
 
-  const stationsRef = useRef<RadioStation[]>(stations);
+  const stationsRef = useRef<StationPoint[]>(stations);
   stationsRef.current = stations;
   const currentStationRef = useRef<RadioStation | null>(currentStation);
   currentStationRef.current = currentStation;
-  const playStationRef = useRef(playStation);
-  playStationRef.current = playStation;
+  const playStationByIdRef = useRef(playStationById);
+  playStationByIdRef.current = playStationById;
 
   useEffect(() => {
     fetch('/countries.geojson')
@@ -583,13 +615,13 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
       mctx.fill();
     };
 
-    geoData.features.forEach((feat: any) => {
+    geoData.features.forEach((feat) => {
       const geom = feat.geometry;
       if (!geom) return;
       if (geom.type === 'Polygon') {
-        geom.coordinates.forEach((ring: number[][]) => tracePolygon(ring));
+        (geom.coordinates as number[][][]).forEach((ring) => tracePolygon(ring));
       } else if (geom.type === 'MultiPolygon') {
-        geom.coordinates.forEach((poly: number[][][]) =>
+        (geom.coordinates as number[][][][]).forEach((poly) =>
           poly.forEach((ring: number[][]) => tracePolygon(ring))
         );
       }
@@ -884,20 +916,20 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
 
     let settlePending = false;
 
-    const getStationCandidates = (): RadioStation[] => {
+    const getStationCandidates = (): (Locatable & { id: number })[] => {
       const current = currentStationRef.current;
-      const all = stationsRef.current || [];
+      const all: (Locatable & { id: number })[] = stationsRef.current || [];
       if (!current) return all;
       if (all.some((s) => s.id === current.id)) return all;
       return [current, ...all];
     };
 
-    const getClosestStation = (g: THREE.Group, candidates: RadioStation[]) => {
+    const getClosestStation = (g: THREE.Group, candidates: (Locatable & { id: number })[]) => {
       const centerLat = Math.max(-85, Math.min(85, (g.rotation.x * 180) / Math.PI));
       let centerLon = (-(g.rotation.y + Math.PI / 2) * 180) / Math.PI;
       centerLon = (((centerLon + 180) % 360) + 360) % 360 - 180;
 
-      let closest: RadioStation | null = null;
+      let closest: (Locatable & { id: number }) | null = null;
       let minDistance = Infinity;
       const cosLat = Math.cos((centerLat * Math.PI) / 180);
 
@@ -918,11 +950,18 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
 
     const isFreeSpin = () => isFlightModeRef.current || isPlannerOpenRef.current;
 
+    const setNeedle = (phase: NeedlePhase) => {
+      if (needleRef.current === phase) return;
+      needleRef.current = phase;
+      setNeedleState(phase);
+    };
+
     const settleOnNearest = () => {
       settlePending = false;
       const { closest } = getClosestStation(globeGroup, getStationCandidates());
+      const c = closest ? stationCoords(closest) : null;
+      setNeedle(c ? 'locking' : 'idle');
       if (!closest) return;
-      const c = stationCoords(closest);
       if (c) {
         targetRotationRef.current = getTargetRotation(c.lat, c.lon, globeGroup.rotation.y);
         velocityX = 0;
@@ -930,7 +969,7 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
       }
       if (closest.id !== currentStationRef.current?.id) {
         isManualTuningRef.current = true;
-        playStationRef.current(closest);
+        playStationByIdRef.current(closest.id);
       }
     };
 
@@ -942,9 +981,6 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
       isDragging = true;
       settlePending = false;
       targetRotationRef.current = null;
-      if (!isFreeSpin()) {
-        setIsTuning(true);
-      }
       previous = { x, y };
       velocityX = 0;
       velocityY = 0;
@@ -961,6 +997,9 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
       const dx = x - previous.x;
       const dy = y - previous.y;
       totalDragDistance += Math.abs(dx) + Math.abs(dy);
+      if (totalDragDistance >= 6 && !isFreeSpin()) {
+        setNeedle('tuning');
+      }
 
       const deltaY = dx * 0.0035;
       const deltaX = dy * 0.0035;
@@ -975,7 +1014,9 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     const endDrag = () => {
       if (!isDragging) return;
       isDragging = false;
-      setIsTuning(false);
+      if (totalDragDistance < 6 && needleRef.current === 'tuning') {
+        setNeedle('idle');
+      }
 
       if (totalDragDistance < 6 && isPlannerOpenRef.current) {
         const target = hoverRef.current;
@@ -1127,8 +1168,12 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
     let viewShift = 0;
     let tilt = 0;
 
-    const animate = () => {
+    let lastFrame = performance.now();
+
+    const animate = (now: number) => {
       animationFrameId = requestAnimationFrame(animate);
+      const step = Math.min(4, Math.max(0.25, (now - lastFrame) / FRAME_MS));
+      lastFrame = now;
       t += 0.006;
 
       currentZoom += (targetZoom - currentZoom) * 0.12;
@@ -1163,25 +1208,28 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
       if (targetRotationRef.current && !isDragging) {
         const dy = targetRotationRef.current.y - globeGroup.rotation.y;
         const dx = targetRotationRef.current.x - globeGroup.rotation.x;
-        globeGroup.rotation.y += dy * 0.08;
-        globeGroup.rotation.x += dx * 0.08;
+        const ease = 1 - Math.pow(1 - SNAP_EASE, step);
+        globeGroup.rotation.y += dy * ease;
+        globeGroup.rotation.x += dx * ease;
         if (Math.abs(dy) < 0.0004 && Math.abs(dx) < 0.0004) {
           globeGroup.rotation.y = targetRotationRef.current.y;
           globeGroup.rotation.x = targetRotationRef.current.x;
           targetRotationRef.current = null;
-          setIsTuning(false);
+          setNeedle('idle');
         }
       } else if (!isDragging && (Math.abs(velocityX) > 0.0001 || Math.abs(velocityY) > 0.0001)) {
-        globeGroup.rotation.y += velocityX;
-        globeGroup.rotation.x += velocityY;
+        globeGroup.rotation.y += velocityX * step;
+        globeGroup.rotation.x += velocityY * step;
         globeGroup.rotation.x = Math.max(-1.45, Math.min(1.45, globeGroup.rotation.x));
-        velocityX *= 0.95;
-        velocityY *= 0.95;
+        const decay = Math.pow(INERTIA_DECAY, step);
+        velocityX *= decay;
+        velocityY *= decay;
       }
 
       if (settlePending && !isDragging && !targetRotationRef.current) {
         if (isFreeSpin()) {
           settlePending = false;
+          setNeedle('idle');
         } else if (Math.hypot(velocityX, velocityY) < 0.002) {
           settleOnNearest();
         }
@@ -1274,11 +1322,9 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
 
         const forward = futurePos.clone().sub(curPos).normalize();
         const up = curPos.clone().normalize();
-        let right = new THREE.Vector3(1, 0, 0);
-        let realUp = new THREE.Vector3(0, 1, 0);
         if (forward.lengthSq() > 0.0001) {
-          right = new THREE.Vector3().crossVectors(up, forward).normalize();
-          realUp = new THREE.Vector3().crossVectors(forward, right).normalize();
+          const right = new THREE.Vector3().crossVectors(up, forward).normalize();
+          const realUp = new THREE.Vector3().crossVectors(forward, right).normalize();
           const mat = new THREE.Matrix4().makeBasis(right, realUp, forward);
           airplaneRef.current.quaternion.setFromRotationMatrix(mat);
         }
@@ -1327,7 +1373,7 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
       renderer.render(scene, camera);
     };
     const _anchor = new THREE.Vector3();
-    animate();
+    animationFrameId = requestAnimationFrame(animate);
 
     return () => {
       cancelAnimationFrame(animationFrameId);
@@ -1352,36 +1398,61 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
   useEffect(() => {
     if (!stationPinsGroupRef.current) return;
     const group = stationPinsGroupRef.current;
+    group.children.forEach((child) => {
+      if (child instanceof THREE.InstancedMesh) {
+        child.geometry.dispose();
+        (child.material as THREE.Material).dispose();
+        child.dispose();
+      }
+    });
     group.clear();
     if (stations.length === 0) return;
 
     const sun = solarPosition(new Date());
     const mesh = new THREE.InstancedMesh(
       new THREE.SphereGeometry(0.72, 8, 8),
-      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9 }),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.92 }),
+      stations.length
+    );
+    const glow = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(0.72, 10, 10),
+      new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0.11,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
       stations.length
     );
 
     const dummy = new THREE.Object3D();
-    const night = new THREE.Color(0xffc670);
-    const day = new THREE.Color(0x63d3f2);
+    const nightColor = new THREE.Color(0xffc670);
+    const dayColor = new THREE.Color(0xe39a45);
+    const color = new THREE.Color();
     let n = 0;
 
     stations.forEach((st) => {
       const c = stationCoords(st);
       if (!c) return;
+      const night = nightness(c.lat, c.lon, sun);
       dummy.position.copy(toVector(c.lat, c.lon, RADIUS + 0.6));
-      const isNight = isNightAt(c.lat, c.lon, sun);
-      dummy.scale.setScalar(isNight ? 1.3 : 0.85);
+      dummy.scale.setScalar(0.95 + 0.3 * night);
       dummy.updateMatrix();
       mesh.setMatrixAt(n, dummy.matrix);
-      mesh.setColorAt(n, isNight ? night : day);
+      mesh.setColorAt(n, color.copy(dayColor).lerp(nightColor, night));
+      dummy.scale.setScalar(2.4 * night + 0.001);
+      dummy.updateMatrix();
+      glow.setMatrixAt(n, dummy.matrix);
+      glow.setColorAt(n, color.copy(nightColor).multiplyScalar(night));
       n++;
     });
 
-    mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    for (const layer of [mesh, glow]) {
+      layer.count = n;
+      layer.instanceMatrix.needsUpdate = true;
+      if (layer.instanceColor) layer.instanceColor.needsUpdate = true;
+    }
+    group.add(glow);
     group.add(mesh);
   }, [stations, sunTick]);
 
@@ -1583,7 +1654,7 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
       const m = o.material as THREE.Material | THREE.Material[] | undefined;
       if (Array.isArray(m)) m.forEach((x) => x.dispose());
       else if (m) {
-        (m as any).map?.dispose?.();
+        (m as THREE.Material & { map?: THREE.Texture | null }).map?.dispose();
         m.dispose();
       }
     });
@@ -1595,7 +1666,7 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
       return;
     }
 
-    const addArc = (id: number, route: { origin: any; destination: any }, color: number) => {
+    const addArc = (id: number, route: { origin: LatLon; destination: LatLon }, color: number) => {
       const pts = buildLiftedArc(
         route.origin.latitude,
         route.origin.longitude,
@@ -1831,16 +1902,12 @@ export const Globe: React.FC<GlobeProps> = ({ stations = [] }) => {
 
       {!isFlightMode && !isPlannerOpen && (
         <div
-          className={`needle${isTuning ? ' is-tuning' : ''}`}
+          className={`needle is-${needle}`}
           aria-hidden="true"
         >
-          <svg width="120" height="120" viewBox="-60 -60 120 120">
-            <line className="needle-line" x1="0" y1="-58" x2="0" y2="-20" />
-            <line className="needle-line" x1="0" y1="20" x2="0" y2="58" />
-            <path className="needle-bracket" d="M -20 -11 L -20 -20 L -11 -20" />
-            <path className="needle-bracket" d="M 11 -20 L 20 -20 L 20 -11" />
-            <path className="needle-bracket" d="M 20 11 L 20 20 L 11 20" />
-            <path className="needle-bracket" d="M -11 20 L -20 20 L -20 11" />
+          <svg width="64" height="64" viewBox="-32 -32 64 64">
+            <circle className="needle-ring" r="22" />
+            <circle className="needle-core" r="2.5" />
           </svg>
         </div>
       )}
