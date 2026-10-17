@@ -8,7 +8,7 @@ class UserRegister(BaseModel):
 
 
 class UserLogin(BaseModel):
-    login: str = Field(..., description="Email or username")
+    login: str = Field(..., min_length=1, max_length=255, description="Email или имя пользователя")
     password: str = Field(..., min_length=1, max_length=128)
 
 
@@ -21,3 +21,16 @@ class TokenResponse(BaseModel):
     user_id: int
     username: str
     role: str
+
+
+class TelegramAuthRequest(BaseModel):
+    init_data: str = Field(..., min_length=1, max_length=4096)
+
+
+class TelegramProvider(BaseModel):
+    enabled: bool
+    bot_username: str | None = None
+
+
+class ProvidersResponse(BaseModel):
+    telegram: TelegramProvider

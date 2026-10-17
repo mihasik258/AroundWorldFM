@@ -19,16 +19,22 @@
 
 | Метод | Путь | Доступ | Назначение |
 |---|---|---|---|
-| GET | `/health` | — | Проверка состояния сервера |
+| GET | `/health` | — | Liveness: процесс жив |
+| GET | `/health/ready` | — | Readiness: база доступна |
+| GET | `/api/v1/auth/providers` | — | Какие способы входа включены |
 | POST | `/api/v1/auth/register` | — | Регистрация |
 | POST | `/api/v1/auth/login` | — | Вход, выдача пары токенов |
+| POST | `/api/v1/auth/telegram` | — | Вход из Telegram Mini App по `initData` |
 | POST | `/api/v1/auth/refresh` | cookie | Новый access-токен (с ротацией refresh) |
 | POST | `/api/v1/auth/logout` | cookie | Выход с текущего устройства |
 | GET | `/api/v1/auth/sessions` | USER | Список активных сессий |
 | DELETE | `/api/v1/auth/sessions/{session_id}` | USER | Отзыв одной сессии |
 | POST | `/api/v1/auth/sessions/revoke-all` | USER | Выход на всех **остальных** устройствах |
 | GET | `/api/v1/users/me` | USER | Профиль текущего пользователя |
-| POST | `/api/v1/users/me/change-password` | USER | Смена пароля |
+| POST | `/api/v1/users/me/change-password` | USER | Смена или установка пароля |
+| POST | `/api/v1/users/me/identities/telegram/link` | USER | Одноразовая ссылка на бота для привязки Telegram |
+| DELETE | `/api/v1/users/me/identities/{provider}` | USER | Отвязать способ входа |
+| DELETE | `/api/v1/users/me` | USER | Удалить аккаунт |
 | GET | `/api/v1/stations` | — | Список станций с фильтрами |
 | GET | `/api/v1/stations/random` | — | Случайная работающая станция |
 | GET | `/api/v1/stations/genres` | — | Все доступные жанры |
@@ -36,7 +42,9 @@
 | GET | `/api/v1/stations/vibe/list` | — | Список поддерживаемых вайбов |
 | GET | `/api/v1/stations/vibe/next` | — | Следующая станция по вайбу |
 | GET | `/api/v1/stations/vibe/stations` | — | Все станции вайба (для глобуса) |
+| GET | `/api/v1/stations/vibe/map` | — | Точки станций вайба для глобуса |
 | GET | `/api/v1/stations/vibe/languages` | — | Языки с количеством станций |
+| GET | `/api/v1/stations/{station_id}` | — | Станция по ID |
 | GET | `/api/v1/stations/{station_id}/stream` | — | Проксирование аудиопотока |
 | GET | `/api/v1/stations/{station_id}/now-playing` | — | Текущий трек (ICY-метаданные) |
 | GET | `/api/v1/stations/favorites/my` | USER | Избранные станции |
@@ -46,21 +54,27 @@
 | POST | `/api/v1/admin/stations` | ADMIN | Создать станцию |
 | PATCH | `/api/v1/admin/stations/{station_id}` | ADMIN | Обновить станцию |
 | DELETE | `/api/v1/admin/stations/{station_id}` | ADMIN | Удалить станцию |
-| POST | `/api/v1/admin/trigger-stream-check` | ADMIN | Запустить проверку потоков |
+| POST | `/api/v1/admin/trigger-stream-check` | ADMIN | Запустить проверку потоков в фоне |
+| GET | `/api/v1/flights/routes` | — | Маршруты авиарежима |
+| GET | `/api/v1/flights/routes/{route_id}` | — | Маршрут |
+| GET | `/api/v1/flights/routes/{route_id}/tuning` | — | Станция под самолётом |
+| GET | `/api/v1/flights/tuning/point` | — | Ближайшая станция к точке |
 
-Всего 28 эндпоинтов. «cookie» — нужен refresh-cookie, access-токен не требуется.
+«cookie» — нужен refresh-cookie, access-токен не требуется. В продакшене (`ENVIRONMENT=production`) `/docs`, `/redoc` и `/openapi.json` отключены.
+
+Служебные эндпоинты бота `/api/v1/internal/telegram/*` не входят в публичный API: они требуют заголовок `X-Bot-Secret`, без него отвечают `404`, а nginx закрывает этот префикс снаружи.
 
 ---
 
 ## Система
 
 ### `GET /health`
-Проверка живости сервиса. Токен не требуется.
+Liveness для Docker и балансировщика: `{"status": "ok", "version": "2.1.0"}`. В базу не ходит.
 
-```json
-{ "status": "healthy", "database": "connected", "service": "AroundFM API", "version": "2.0.0" }
-```
-Пингует базу запросом `SELECT 1`; если она недоступна — `503` и `"status": "unhealthy"`.
+### `GET /health/ready`
+Readiness: выполняет `SELECT 1`. База недоступна — `503` и `{"status": "unavailable"}`; подробности ошибки пишутся только в лог.
+
+Каждый ответ содержит заголовок `X-Request-ID`. Если клиент прислал свой (`[A-Za-z0-9._-]`, до 64 символов), он сохраняется; иначе генерируется. Тот же ID попадает в логи бэкенда и в тело ответа `500`.
 
 ---
 
@@ -107,6 +121,19 @@ Set-Cookie: refresh_token=eyJ...; HttpOnly; Secure; SameSite=strict; Path=/api/v
 
 Неизвестный логин, аккаунт без пароля и неверный пароль дают один и тот же ответ за одинаковое время: во всех трёх случаях выполняется одна проверка bcrypt. По тексту и времени ответа нельзя узнать, существует ли аккаунт. bcrypt выполняется в пуле потоков и не блокирует обработку остальных запросов.
 
+### `GET /api/v1/auth/providers` → `200`
+```json
+{ "telegram": { "enabled": true, "bot_username": "aroundfm_bot" } }
+```
+Провайдер включён, когда заданы его переменные окружения. Фронтенд по этому ответу показывает или прячет кнопки.
+
+### `POST /api/v1/auth/telegram` → `200`
+Вход из Telegram Mini App. Тело: `{ "init_data": "<Telegram.WebApp.initData>" }`.
+
+Подпись проверяется по [алгоритму Telegram](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app): `secret = HMAC_SHA256("WebAppData", bot_token)`, `hash = HMAC_SHA256(secret, data_check_string)`, сравнение за постоянное время. `auth_date` должен быть не старше `TELEGRAM_AUTH_MAX_AGE_SECONDS` (по умолчанию час), повторяющиеся поля отклоняются.
+
+Если Telegram-аккаунт уже привязан, выполняется вход в этот аккаунт; иначе создаётся новый пользователь с ролью `user`. Ответ и cookie — как у `/auth/login`. Ошибки: `401` — подпись не сошлась или данные устарели; `404` — Telegram не настроен.
+
 ### `POST /api/v1/auth/refresh` → `200`
 Новый access-токен. Тела у запроса нет — браузер сам прикладывает refresh-cookie.
 Проверяется подпись JWT и состояние сессии в БД. Каждый вызов **ротирует** refresh-токен: в ответе приходит новая cookie, старая перестаёт действовать.
@@ -142,15 +169,32 @@ Set-Cookie: refresh_token=eyJ...; HttpOnly; Secure; SameSite=strict; Path=/api/v
 ## Пользователи
 
 ### `GET /api/v1/users/me` → `200` — USER
-Профиль текущего пользователя (`UserRead`, см. ответ регистрации).
+```json
+{ "id": 3, "username": "myuser", "email": "user@example.com", "role": "user",
+  "is_active": true, "created_at": "...",
+  "auth_providers": ["password", "telegram"],
+  "identities": [ { "provider": "telegram", "display_name": "My Name", "created_at": "..." } ] }
+```
 
 ### `POST /api/v1/users/me/change-password` → `200` — USER
 ```json
 { "old_password": "MyPass123!", "new_password": "NewPass456!" }
 ```
-Проверяется старый пароль. После успешной смены **отзываются все сессии, включая текущую**, а ответ удаляет refresh-cookie — требуется повторный вход на всех устройствах.
+Если пароль уже задан, `old_password` обязателен и проверяется. Если аккаунт создан через Telegram и пароля нет, запрос **задаёт** пароль, `old_password` не нужен. В обоих случаях **отзываются все сессии, включая текущую**, и ответ удаляет refresh-cookie. Лимит — как у входа.
 
-Ошибки: `400` — старый пароль неверен либо у учётной записи нет пароля (вход только через внешнего провайдера).
+Ошибки: `400` — неверный старый пароль.
+
+### `POST /api/v1/users/me/identities/telegram/link` → `200` — USER
+```json
+{ "url": "https://t.me/aroundfm_bot?start=link_<token>", "expires_in": 600 }
+```
+Пользователь открывает ссылку, бот получает `/start link_<token>` и вызывает внутренний API бэкенда с `X-Bot-Secret`. Токен одноразовый, живёт `TELEGRAM_LINK_TTL_SECONDS`, в базе хранится только его хэш.
+
+### `DELETE /api/v1/users/me/identities/{provider}` → `200` — USER
+`provider`: `password` или `telegram`. `409` — это единственный способ входа (иначе аккаунт стал бы недоступен); `404` — способ не привязан.
+
+### `DELETE /api/v1/users/me` → `200` — USER
+Тело: `{ "confirm_username": "myuser" }`. Удаляет аккаунт со всеми сессиями, привязками, токенами и избранным. `400` — имя не совпало; `409` — это последний активный администратор.
 
 ---
 
@@ -194,6 +238,11 @@ Set-Cookie: refresh_token=eyJ...; HttpOnly; Secure; SameSite=strict; Path=/api/v
 ### `GET /api/v1/stations/languages` → `200`
 Отсортированный список языков активных станций.
 
+### `GET /api/v1/stations/{station_id}` → `200`
+Одна станция (`StationRead`), `404` — нет такой. Используется глобусом при выборе станции и ссылками «Слушать» из бота (`/?station=42`).
+
+Поле `location_precision`: `exact` — у станции свои координаты; `country` — известна только страна, станция поставлена рядом со столицей, и плеер показывает только страну.
+
 ---
 
 ## Вайбы (тематические подборки)
@@ -219,6 +268,13 @@ Set-Cookie: refresh_token=eyJ...; HttpOnly; Secure; SameSite=strict; Path=/api/v
 ### `GET /api/v1/stations/vibe/stations` → `200`
 Все станции вайба, у которых заданы координаты — для отображения на глобусе. Параметры: `vibe`, `exclude_languages`.
 
+### `GET /api/v1/stations/vibe/map` → `200`
+Компактные точки для глобуса — только номер станции и координаты:
+```json
+{ "stations": [[42, 48.857, 2.352], [57, -1.283, 36.817]] }
+```
+Около 25 байт на станцию вместо примерно 800 у `/vibe/stations`. Полная карточка запрашивается через `GET /stations/{id}`, когда станция начинает играть. Ответ можно кешировать (`Cache-Control: public, max-age=120`). Параметры — как у `/vibe/stations`.
+
 ### `GET /api/v1/stations/vibe/languages` → `200`
 Языки с количеством станций, по убыванию:
 ```json
@@ -230,16 +286,22 @@ Set-Cookie: refresh_token=eyJ...; HttpOnly; Secure; SameSite=strict; Path=/api/v
 ## Воспроизведение
 
 ### `GET /api/v1/stations/{station_id}/stream`
-Проксирование аудиопотока (`audio/mpeg`, потоковая отдача). Нужно, чтобы обойти CORS-ограничения и блокировки провайдеров при воспроизведении в браузере. `404` — станция или поток не найдены.
+Проксирование аудиопотока. Плеер сначала пробует URL станции напрямую, а прокси использует, если поток не играет в браузере (http на https-странице, CORS, блокировки). `Content-Type` берётся у источника (`audio/aac`, `audio/ogg`…), по умолчанию `audio/mpeg`.
+
+Защита от SSRF: URL допускаются только `http(s)` без логина и пароля, а каждый исходящий запрос, **включая каждый редирект**, проверяется: хост должен разрешаться только в публичные адреса (не loopback, не частные сети, не link-local вроде `169.254.169.254`). То же действует для now-playing и проверки потоков. Для локальной разработки с потоками в частной сети есть `ALLOW_PRIVATE_STREAM_HOSTS=true`.
+
+Ошибки: `404` — станция или поток не найдены; `502` — источник недоступен или ответил не `200`.
 
 ### `GET /api/v1/stations/{station_id}/now-playing` → `200`
-Текущий трек из ICY-метаданных потока. Результат кэшируется в памяти на 20 секунд.
+Текущий трек из ICY-метаданных потока: читается ровно один блок метаданных по `icy-metaint`, текст декодируется как UTF-8 с откатом на Latin-1. Результат кэшируется на 20 секунд (`NOW_PLAYING_CACHE_TTL_SECONDS`), одновременные запросы к одной станции ждут один поход к источнику.
 ```json
 { "station_id": 1, "has_track": true, "raw_title": "Miles Davis - So What",
   "artist": "Miles Davis", "title": "So What",
   "spotify_url": "https://open.spotify.com/search/Miles%20Davis%20So%20What" }
 ```
 Если станция не передаёт метаданные, `has_track` будет `false`, остальные поля — `null`.
+
+`spotify_url` — обычная ссылка на поиск трека в Spotify. Она не требует ни ключей, ни аккаунта и работает у любого пользователя. Интеграции с аккаунтами Spotify нет сознательно: с 2025 года Spotify выдаёт полный доступ к Web API только компаниям с 250 000+ активных пользователей, а в режиме разработки приложение доступно максимум 5 вручную добавленным людям.
 
 ---
 
@@ -249,7 +311,7 @@ Set-Cookie: refresh_token=eyJ...; HttpOnly; Secure; SameSite=strict; Path=/api/v
 Избранные станции пользователя (формат `StationRead`), недавно добавленные первыми.
 
 ### `POST /api/v1/stations/favorites/{station_id}` → `200` — USER
-Добавление в избранное. Повторное добавление не создаёт дубликат (на уровне БД стоит `UNIQUE(user_id, station_id)`) и возвращает `{"status": "ok", "message": "Станция уже в избранном"}`.
+Добавление в избранное: `INSERT … ON CONFLICT DO NOTHING` по `UNIQUE(user_id, station_id)`, поэтому одновременные клики не дают ни дубликата, ни ошибки. Повтор возвращает `{"status": "ok", "message": "Уже в избранном"}`. `404` — станции не существует.
 
 ### `DELETE /api/v1/stations/favorites/{station_id}` → `200` — USER
 Удаление из избранного. `404`, если станции не было в избранном.
@@ -274,7 +336,11 @@ Set-Cookie: refresh_token=eyJ...; HttpOnly; Secure; SameSite=strict; Path=/api/v
   "latitude": 48.85, "longitude": 2.35, "language": "french",
   "tags": ["jazz", "chill"], "codec": "MP3", "bitrate": 128 }
 ```
-Поле `tags` принимает **и список** (`["jazz","chill"]`), **и строку через запятую** (`"jazz,chill"`) — приводится к нормализованному списку в нижнем регистре. Обязательны только `name`, `stream_url`, `country`.
+Поле `tags` принимает **и список** (`["jazz","chill"]`), **и строку через запятую** (`"jazz,chill"`) — приводится к нормализованному списку в нижнем регистре, не больше 50 тегов. Обязательны только `name`, `stream_url`, `country`.
+
+Поле `language` нормализуется: регистр, пробелы и известные варианты написания приводятся к одному коду (`Englsih`, `American English` → `english`).
+
+Валидация: `stream_url`, `homepage_url`, `favicon_url` — только `http(s)` без учётных данных (никаких `javascript:` и `file:`); широта −90…90, долгота −180…180 (дублируется CHECK-ограничением в БД); `bitrate` 8–1536.
 
 Одним запросом создаются записи в трёх таблицах: `stations`, `station_streams` и `stream_health`.
 
@@ -288,10 +354,10 @@ Set-Cookie: refresh_token=eyJ...; HttpOnly; Secure; SameSite=strict; Path=/api/v
 ### `DELETE /api/v1/admin/stations/{station_id}` → `200`
 Удаление станции. Каскадно удаляются её потоки (`station_streams`), телеметрия (`stream_health`) и записи в избранном у всех пользователей (`favorites`).
 
-### `POST /api/v1/admin/trigger-stream-check` → `200`
-Принудительный запуск проверки доступности всех потоков. Обходит все станции (до 10 параллельных запросов), обновляет `stream_health`: `is_active`, `response_time_ms`, `check_fail_count`, `last_checked_at`. Поток помечается неактивным после 2 неудачных проверок подряд.
+### `POST /api/v1/admin/trigger-stream-check` → `202`
+Запускает проверку всех потоков в фоне и сразу отвечает `{"status": "accepted"}`. `409` — проверка уже идёт. Обходит все станции (`STREAM_CHECK_CONCURRENCY` параллельно, по умолчанию 10) и обновляет `stream_health`: `is_active`, `response_time_ms`, `check_fail_count`, `last_checked_at`. Поток помечается неактивным после 2 неудачных проверок подряд.
 
-> Операция долгая: на каталоге в ~2000 станций занимает около 6 минут. Запрос держит соединение до полного завершения.
+Фоновая проверка идёт порциями: каждые `STREAM_CHECK_INTERVAL_SECONDS` (5 минут) берётся до `STREAM_CHECK_BATCH_SIZE` (200) потоков, у которых подошёл срок. Сначала проверяются новые, живые — раз в `STREAM_RECHECK_ACTIVE_HOURS` (6 часов), неработающие — раз в `STREAM_RECHECK_INACTIVE_HOURS` (сутки). Нагрузка размазана равномерно, без часовых пиков. Фоновые задачи берут advisory-lock PostgreSQL, поэтому при нескольких воркерах или репликах каждая выполняется в одном экземпляре.
 
 ---
 
@@ -316,19 +382,13 @@ Set-Cookie: refresh_token=eyJ...; HttpOnly; Secure; SameSite=strict; Path=/api/v
 
 **Требования к секретам.** `SECRET_KEY` и `SECRET_PEPPER` обязательны, не короче 32 байт (RFC 7518 для HMAC-SHA256), значений по умолчанию нет ни в коде, ни в `docker-compose.yml`. Сгенерировать: `openssl rand -hex 32`.
 
-**IP клиента за прокси.** nginx перезаписывает `X-Forwarded-For` своим `$remote_addr`, а uvicorn доверяет этому заголовку только от частных подсетей (`FORWARDED_ALLOW_IPS` в `backend/Dockerfile`). Без этого все пользователи выглядели бы для бэкенда как IP nginx, и лимит на вход был бы общим на всех.
+**IP клиента за прокси.** В продакшене цепочка такая: Caddy → nginx → uvicorn. nginx восстанавливает адрес клиента из `X-Forwarded-For` только от частных подсетей (Caddy в сети Docker) и передаёт дальше **один** адрес — свой `$remote_addr`. uvicorn доверяет заголовку тоже только от частных подсетей (`FORWARDED_ALLOW_IPS` в `backend/Dockerfile`). Подставить чужой IP снаружи нельзя, а лимиты считаются по реальному клиенту.
 
-### Переход с предыдущей версии
+### Схема базы и миграции
 
-Таблицы создаются через `create_all()`, а он не добавляет колонки в уже существующие таблицы. В базе, созданной до этого изменения, выполните один раз:
-```sql
-ALTER TABLE user_sessions ADD COLUMN previous_token_hash VARCHAR(64);
-ALTER TABLE user_sessions ADD COLUMN rotated_at TIMESTAMPTZ;
-CREATE INDEX ix_user_sessions_previous_token_hash ON user_sessions (previous_token_hash);
--- старые refresh-токены лежали в localStorage и могли утечь: закрываем все прежние сессии
-UPDATE user_sessions SET is_revoked = true;
-```
-Либо пересоздайте базу: `docker compose down -v`. После обновления всем пользователям нужно войти заново.
+Схема управляется Alembic (`backend/migrations`): `0001` — исходная схема, `0002` — удаление интеграции Spotify (таблица `oauth_credentials`, привязки `spotify`), `0003` — нормализация данных каталога: варианты написания языков сведены к одному коду, станции с условными координатами 20°N 0°E перенесены в столицу своей страны или убраны с глобуса; `0004` — поле `location_precision`. В Docker миграции применяет одноразовый сервис `migrate` до старта бэкенда; локально — `alembic upgrade head`. Тест `tests/test_migrations.py` и шаг CI `alembic check` падают, если модели разошлись с миграциями.
+
+База, созданная прежней версией через `create_all()`, с миграциями несовместима (другие имена ограничений, новые таблицы). Перед переходом сделайте дамп и создайте базу заново; пользователей можно перенести вместе с хэшами паролей, если не менять `SECRET_PEPPER`.
 
 ---
 
@@ -341,6 +401,7 @@ UPDATE user_sessions SET is_revoked = true;
 | Что | Лимит | Ответ при превышении |
 |---|---|---|
 | Запросы к `/api/` с одного IP | 30 в секунду, всплеск до 120 | `429` |
+| Вход, регистрация, refresh, Telegram с одного IP | 5 в секунду, всплеск до 20 | `429` |
 | Одновременные проксируемые потоки с одного IP | 10 | `429` |
 | Одновременные проксируемые потоки всего | 300 | `429` |
 
@@ -356,16 +417,20 @@ UPDATE user_sessions SET is_revoked = true;
 
 | Код | Когда возникает |
 |---|---|
-| `400` | Нарушение бизнес-правил: занятый email/username/URL, неверный старый пароль |
+| `400` | Нарушение бизнес-правил: занятый email/username/URL, неверный старый пароль, имя не совпало при удалении |
 | `401` | Токен отсутствует, недействителен, истёк, не того типа; сессия отозвана или истекла; повторное использование refresh-токена; неверный логин или пароль |
 | `403` | Недостаточно прав (нужна роль admin) либо учётная запись отключена |
-| `404` | Запрошенный объект не найден |
+| `404` | Запрошенный объект не найден; Telegram не настроен |
+| `409` | Конфликт: Telegram уже привязан к другому пользователю, нельзя отвязать единственный способ входа, проверка потоков уже идёт |
+| `410` | Ссылка привязки Telegram устарела или использована |
 | `422` | Ошибка валидации входных данных |
-| `429` | Превышено ограничение частоты запросов: `/auth/login` и `/auth/register` в приложении, любой `/api/` и число одновременных потоков в nginx |
+| `429` | Превышено ограничение частоты запросов: вход, регистрация, Telegram, ссылка привязки — в приложении; любой `/api/`, эндпоинты входа и число одновременных потоков — в nginx |
+| `500` | Непредвиденная ошибка: `{"detail": "Внутренняя ошибка сервера", "request_id": "…"}`, подробности только в логе |
+| `502` | Источник радиопотока недоступен |
 
-Формат ошибки валидации содержит и человекочитаемое сообщение, и машинные подробности:
+Формат ошибки валидации содержит и человекочитаемое сообщение, и машинные подробности. Введённые значения в ответ не попадают — пароль не вернётся даже в ошибке:
 ```json
-{ "detail": "Некорректный адрес электронной почты; Пароль должен содержать минимум 8 символов",
-  "validation_errors": [ ... ] }
+{ "detail": "Некорректный email; Пароль короче 8 символов",
+  "validation_errors": [ { "loc": ["body", "email"], "type": "value_error", "msg": "..." } ] }
 ```
 Остальные ошибки возвращаются в стандартном виде: `{ "detail": "текст ошибки" }`.

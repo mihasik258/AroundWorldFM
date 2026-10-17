@@ -81,3 +81,7 @@ go.work.sum
 *.log
 *.sqlite3
 *.db
+
+backups/
+coverage/
+coverage.xml

@@ -1,6 +1,6 @@
 import random
 
-from sqlalchemy import func, not_, or_, select
+from sqlalchemy import Select, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -11,28 +11,161 @@ from app.services.radio_service import RadioService, csv_key
 
 VIBE_KEYWORDS = {
     "focus": [
-        "ambient", "drone", "soundscape", "neoclassical", "piano", "sleep",
-        "study", "meditation", "chillout", "zen", "mindfulness", "instrumental", "calm"
+        "ambient",
+        "drone",
+        "soundscape",
+        "neoclassical",
+        "piano",
+        "sleep",
+        "study",
+        "meditation",
+        "chillout",
+        "zen",
+        "mindfulness",
+        "instrumental",
+        "calm",
     ],
     "night_drive": [
-        "synthwave", "retrowave", "darksynth", "cyberpunk", "outrun", "dreamwave",
-        "future synth", "synthpop", "darkwave", "melodic techno", "trance", "vaporwave"
+        "synthwave",
+        "retrowave",
+        "darksynth",
+        "cyberpunk",
+        "outrun",
+        "dreamwave",
+        "future synth",
+        "synthpop",
+        "darkwave",
+        "melodic techno",
+        "trance",
+        "vaporwave",
     ],
     "coffee": [
-        "jazz", "smooth jazz", "acoustic", "indie", "soul", "neo-soul",
-        "bossa nova", "folk", "blues", "lo-fi", "mellow"
+        "jazz",
+        "smooth jazz",
+        "acoustic",
+        "indie",
+        "soul",
+        "neo-soul",
+        "bossa nova",
+        "folk",
+        "blues",
+        "lo-fi",
+        "mellow",
+        "mpb",
+        "trova",
+        "bolero",
+        "afro jazz",
+        "latin jazz",
     ],
     "party": [
-        "dance", "club", "house", "electro house", "edm", "disco", "nu-disco",
-        "eurodance", "party", "techno", "electronic"
+        "dance",
+        "club",
+        "house",
+        "electro house",
+        "edm",
+        "disco",
+        "nu-disco",
+        "eurodance",
+        "party",
+        "techno",
+        "electronic",
+        "afrobeats",
+        "afrobeat",
+        "amapiano",
+        "gqom",
+        "kwaito",
+        "dancehall",
+        "reggaeton",
+        "cumbia",
+        "merengue",
+        "bachata",
+        "soca",
+        "kuduro",
+        "funk carioca",
+        "baile funk",
+        "bongo flava",
+        "azonto",
+        "ndombolo",
+        "k-pop",
+        "dangdut",
+        "latin pop",
+        "tropical",
     ],
     "sunset": [
-        "chill", "lofi", "lo-fi", "downtempo", "tropical", "balearic",
-        "sunset", "lounge", "groove", "dub", "reggae"
+        "chill",
+        "lofi",
+        "lo-fi",
+        "downtempo",
+        "tropical",
+        "balearic",
+        "sunset",
+        "lounge",
+        "groove",
+        "dub",
+        "reggae",
+        "zouk",
+        "kizomba",
+        "afro house",
+        "roots reggae",
+        "lovers rock",
     ],
     "world_odyssey": [
-        "world", "ethnic", "tango", "flamenco", "bossa nova", "celtic",
-        "balkan", "arabic", "oriental", "african", "afrobeat", "greek", "fado", "salsa"
+        "world",
+        "ethnic",
+        "tango",
+        "flamenco",
+        "bossa nova",
+        "celtic",
+        "balkan",
+        "arabic",
+        "oriental",
+        "african",
+        "afrobeat",
+        "greek",
+        "fado",
+        "salsa",
+        "highlife",
+        "soukous",
+        "rumba",
+        "mbalax",
+        "taarab",
+        "juju",
+        "makossa",
+        "semba",
+        "morna",
+        "gnawa",
+        "chaabi",
+        "desert blues",
+        "samba",
+        "mpb",
+        "forró",
+        "sertanejo",
+        "axé",
+        "vallenato",
+        "bolero",
+        "ranchera",
+        "mariachi",
+        "norteño",
+        "son cubano",
+        "andean",
+        "huayno",
+        "bollywood",
+        "qawwali",
+        "ghazal",
+        "gamelan",
+        "enka",
+        "mandopop",
+        "cantopop",
+        "opm",
+        "latin",
+        "latino",
+        "afro",
+        "caribbean",
+        "calypso",
+        "zouk",
+        "kizomba",
+        "traditional",
+        "folklore",
     ],
 }
 
@@ -46,12 +179,51 @@ VIBE_EXCLUSIONS = {
 }
 
 CHATTER_KEYWORDS = [
-    "news", "talk", "speech", "spoken", "politics", "traffic", "weather",
-    "information", "nachrichten", "actualité", "noticias", "notícias",
-    "новости", "болтовня", "podcast", "sports", "sport", "debate",
-    "interview", "current affairs", "bbc radio 4", "bbc radio 5",
-    "npr news", "lbc", "cbs news", "cnn", "fox news",
-    "радио россии", "вести фм", "эхо", "радио свобода"
+    "news",
+    "talk",
+    "speech",
+    "spoken",
+    "politics",
+    "traffic",
+    "weather",
+    "information",
+    "nachrichten",
+    "actualité",
+    "noticias",
+    "notícias",
+    "новости",
+    "болтовня",
+    "podcast",
+    "sports",
+    "sport",
+    "debate",
+    "interview",
+    "current affairs",
+    "bbc radio 4",
+    "bbc radio 5",
+    "npr news",
+    "lbc",
+    "cbs news",
+    "cnn",
+    "fox news",
+    "радио россии",
+    "вести фм",
+    "эхо",
+    "радио свобода",
+    "quran",
+    "koran",
+    "sermon",
+    "bible",
+    "preaching",
+    "catholic",
+    "islamic",
+    "deportes",
+    "futbol",
+    "fútbol",
+    "informativ",
+    "noticia",
+    "parliament",
+    "parlamento",
 ]
 
 VIBE_LABELS = {
@@ -69,10 +241,7 @@ VIBE_PATTERN = "^(" + "|".join(VIBE_KEYWORDS) + ")$"
 
 def is_chatter_station(text: str) -> bool:
     text_low = text.lower()
-    for kw in CHATTER_KEYWORDS:
-        if kw in text_low:
-            return True
-    return False
+    return any(kw in text_low for kw in CHATTER_KEYWORDS)
 
 
 def infer_vibes(tags: str, name: str = "") -> list[str]:
@@ -99,12 +268,16 @@ def infer_vibes(tags: str, name: str = "") -> list[str]:
 
 class VibeService:
     @staticmethod
-    def build_vibe_query(vibe: str, exclude_languages: list[str] | None = None):
+    def build_vibe_query(
+        vibe: str, exclude_languages: list[str] | None = None
+    ) -> Select[tuple[Station]]:
         vibe = vibe.lower().strip()
         keywords = VIBE_KEYWORDS.get(vibe, [])
         exclusions = VIBE_EXCLUSIONS.get(vibe, [])
 
-        clean_exclude_langs = [lang.strip().lower() for lang in (exclude_languages or []) if lang.strip()]
+        clean_exclude_langs = [
+            lang.strip().lower() for lang in (exclude_languages or []) if lang.strip()
+        ]
 
         stmt = (
             select(Station)
@@ -157,6 +330,19 @@ class VibeService:
         return [s for s in pool if s.latitude is not None and s.longitude is not None]
 
     @staticmethod
+    async def get_vibe_points(
+        db: AsyncSession,
+        vibe: str,
+        exclude_languages: list[str] | None = None,
+    ) -> list[tuple[int, float, float]]:
+        pool = await VibeService._vibe_pool(db, vibe, exclude_languages)
+        return [
+            (s.id, round(s.latitude, 3), round(s.longitude, 3))
+            for s in pool
+            if s.latitude is not None and s.longitude is not None
+        ]
+
+    @staticmethod
     async def get_next_station(
         db: AsyncSession,
         vibe: str,
@@ -198,9 +384,11 @@ class VibeService:
             clean = lang.strip().lower()
             if clean in ["unknown", "other", "null", "undefined"]:
                 continue
-            languages.append({
-                "code": clean,
-                "name": clean.capitalize(),
-                "count": count,
-            })
+            languages.append(
+                {
+                    "code": clean,
+                    "name": clean.capitalize(),
+                    "count": count,
+                }
+            )
         return languages

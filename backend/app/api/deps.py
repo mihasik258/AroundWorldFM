@@ -1,8 +1,9 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from fastapi import Depends, HTTPException, status
+import jwt
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +17,10 @@ oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login",
     auto_error=False,
 )
+
+
+def client_ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
 
 
 @dataclass
@@ -38,15 +43,15 @@ async def _resolve_access_token(db: AsyncSession, token: str | None) -> AuthCont
 
     try:
         payload = decode_token(token)
-    except Exception:
-        raise _unauthorized("Недействительный токен")
+    except jwt.PyJWTError as exc:
+        raise _unauthorized("Недействительный токен") from exc
 
     if payload.get("type") != "access":
         raise _unauthorized("Неверный тип токена")
 
     user_id = payload.get("sub")
     session_id = payload.get("sid")
-    if not user_id or not isinstance(session_id, int):
+    if not isinstance(user_id, str) or not user_id.isdigit() or not isinstance(session_id, int):
         raise _unauthorized("Недействительный токен")
 
     session = await db.get(UserSession, session_id)
@@ -54,7 +59,7 @@ async def _resolve_access_token(db: AsyncSession, token: str | None) -> AuthCont
         not session
         or session.user_id != int(user_id)
         or session.is_revoked
-        or session.expires_at < datetime.now(timezone.utc)
+        or session.expires_at < datetime.now(UTC)
     ):
         raise _unauthorized("Сессия отозвана")
 

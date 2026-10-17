@@ -36,7 +36,7 @@ def test_jwt_access_and_refresh_tokens():
     assert payload["role"] == "admin"
     assert payload["type"] == "access"
 
-    refresh_tok, jti = create_refresh_token(subject="42", jti="test-jti-uuid")
+    refresh_tok, _jti = create_refresh_token(subject="42", jti="test-jti-uuid")
     refresh_payload = decode_token(refresh_tok)
 
     assert refresh_payload["sub"] == "42"

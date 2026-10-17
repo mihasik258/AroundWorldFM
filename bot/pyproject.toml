@@ -1,0 +1,43 @@
+[project]
+name = "aroundfm-bot"
+version = "2.1.0"
+description = "AroundFM Telegram bot"
+requires-python = ">=3.12,<3.13"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "S", "SIM", "ASYNC", "RUF", "C4", "PIE", "PT", "T20"]
+ignore = ["E501", "S101", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["aroundfm_bot", "tests"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+packages = ["aroundfm_bot"]
+check_untyped_defs = true
+disallow_incomplete_defs = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["aroundfm_bot"]
+branch = true
+omit = ["aroundfm_bot/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true

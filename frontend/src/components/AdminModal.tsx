@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Loader2, X } from 'lucide-react';
 import { apiRequest } from '../api/client';
 import { SystemStats } from '../types';
-import { X, Shield, Activity, PlusCircle, Radio, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { KNOWN_LANGUAGES, languageLabel } from '../utils/languages';
+import '../styles/sheet.css';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -9,278 +11,198 @@ interface AdminModalProps {
   onStationAdded: () => void;
 }
 
-export const AdminModal: React.FC<AdminModalProps> = ({
-  isOpen,
-  onClose,
-  onStationAdded,
-}) => {
+type Feedback = { text: string; tone: 'success' | 'error' } | null;
+
+const EMPTY_FORM = {
+  name: '',
+  streamUrl: '',
+  country: '',
+  language: '',
+  tags: '',
+  latitude: '',
+  longitude: '',
+};
+
+const errorText = (err: unknown, fallback: string) => (err instanceof Error && err.message) || fallback;
+
+export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onStationAdded }) => {
   const [stats, setStats] = useState<SystemStats | null>(null);
-  const [loadingStats, setLoadingStats] = useState(false);
-  const [checkingStreams, setCheckingStreams] = useState(false);
-  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+  const [checking, setChecking] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
 
-  const [name, setName] = useState('');
-  const [streamUrl, setStreamUrl] = useState('');
-  const [country, setCountry] = useState('');
-  const [language, setLanguage] = useState('');
-  const [tags, setTags] = useState('');
-  const [latitude, setLatitude] = useState('');
-  const [longitude, setLongitude] = useState('');
-  const [addLoading, setAddLoading] = useState(false);
-
-  const fetchStats = async () => {
-    setLoadingStats(true);
+  const fetchStats = useCallback(async () => {
     try {
-      const data = await apiRequest<SystemStats>('/admin/stats');
-      setStats(data);
-    } catch (err: any) {
-      setMessage({ text: err.message || 'Ошибка загрузки', type: 'error' });
-    } finally {
-      setLoadingStats(false);
+      setStats(await apiRequest<SystemStats>('/admin/stats'));
+    } catch (err) {
+      setFeedback({ text: errorText(err, 'Статистика не загрузилась'), tone: 'error' });
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (isOpen) {
-      fetchStats();
-    }
-  }, [isOpen]);
+    if (!isOpen) return;
+    setFeedback(null);
+    fetchStats();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose, fetchStats]);
 
-  const handleTriggerHealthCheck = async () => {
-    setCheckingStreams(true);
-    setMessage(null);
+  if (!isOpen) return null;
+
+  const field = (key: keyof typeof EMPTY_FORM) => ({
+    value: form[key],
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [key]: e.target.value }),
+  });
+
+  const checkStreams = async () => {
+    setChecking(true);
+    setFeedback(null);
     try {
-      const res = await apiRequest('/admin/trigger-stream-check', { method: 'POST' });
-      setMessage({ text: res.message || 'Проверка завершена', type: 'success' });
-      fetchStats();
-    } catch (err: any) {
-      setMessage({ text: err.message || 'Ошибка проверки', type: 'error' });
+      await apiRequest('/admin/trigger-stream-check', { method: 'POST' });
+      setFeedback({ text: 'Проверка потоков запущена, статистика обновится через несколько минут', tone: 'success' });
+    } catch (err) {
+      setFeedback({ text: errorText(err, 'Проверка не запустилась'), tone: 'error' });
     } finally {
-      setCheckingStreams(false);
+      setChecking(false);
     }
   };
 
-  const handleCreateStation = async (e: React.FormEvent) => {
+  const createStation = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAddLoading(true);
-    setMessage(null);
-
+    setSaving(true);
+    setFeedback(null);
     try {
       await apiRequest('/admin/stations', {
         method: 'POST',
         body: JSON.stringify({
-          name,
-          stream_url: streamUrl,
-          country,
-          language: language || null,
-          tags: tags.toLowerCase(),
-          latitude: latitude ? parseFloat(latitude) : null,
-          longitude: longitude ? parseFloat(longitude) : null,
+          name: form.name.trim(),
+          stream_url: form.streamUrl.trim(),
+          country: form.country.trim(),
+          language: form.language.trim() || null,
+          tags: form.tags,
+          latitude: form.latitude ? Number(form.latitude) : null,
+          longitude: form.longitude ? Number(form.longitude) : null,
         }),
       });
-
-      setMessage({ text: 'Станция добавлена', type: 'success' });
-      setName('');
-      setStreamUrl('');
-      setCountry('');
-      setLanguage('');
-      setTags('');
-      setLatitude('');
-      setLongitude('');
+      setFeedback({ text: `Станция «${form.name.trim()}» добавлена`, tone: 'success' });
+      setForm(EMPTY_FORM);
       fetchStats();
       onStationAdded();
-    } catch (err: any) {
-      setMessage({ text: err.message || 'Ошибка', type: 'error' });
+    } catch (err) {
+      setFeedback({ text: errorText(err, 'Станция не добавлена'), tone: 'error' });
     } finally {
-      setAddLoading(false);
+      setSaving(false);
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-backdrop">
-      <div className="glass-panel rounded-3xl p-6 sm:p-8 w-full max-w-xl relative shadow-2xl border border-slate-700/80 max-h-[90vh] flex flex-col">
-        <button
-          onClick={onClose}
-          className="absolute right-5 top-5 text-slate-400 hover:text-white p-1 rounded-lg bg-slate-800/60"
-        >
-          <X className="w-5 h-5" />
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="sheet is-wide" role="dialog" aria-modal="true" aria-labelledby="admin-title">
+        <button className="key sheet-close" onClick={onClose} aria-label="Закрыть">
+          <X className="w-4 h-4" />
         </button>
 
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
-            <Shield className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-white">Панель администратора (RBAC)</h2>
-            <p className="text-xs text-slate-400">Системные показатели и управление радиостанциями</p>
-          </div>
-        </div>
+        <h2 id="admin-title" className="sheet-title">
+          Администрирование
+        </h2>
 
-        {message && (
-          <div
-            className={`mb-4 p-3 rounded-xl text-xs flex items-center gap-2 ${
-              message.type === 'success'
-                ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
-                : 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
-            }`}
-          >
-            {message.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            )}
-            <span>{message.text}</span>
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-6">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                Технико-экономические показатели (ТЭП)
-              </h3>
-              <button
-                onClick={handleTriggerHealthCheck}
-                disabled={checkingStreams}
-                className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium"
-              >
-                {checkingStreams ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                <span>Проверить потоки</span>
-              </button>
-            </div>
-
-            {loadingStats || !stats ? (
-              <div className="h-20 glass-card rounded-2xl flex items-center justify-center text-xs text-slate-400">
-                <Loader2 className="w-4 h-4 animate-spin mr-2" /> Загрузка показателей...
+        {stats ? (
+          <>
+            <dl className="meters">
+              <div className="meter">
+                <dt>Станций</dt>
+                <dd className="num">{stats.total_stations}</dd>
               </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
-                <div className="p-3 rounded-xl glass-card">
-                  <div className="text-lg font-black text-white">{stats.total_stations}</div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Всего станций</div>
-                </div>
-                <div className="p-3 rounded-xl glass-card">
-                  <div className="text-lg font-black text-emerald-400">{stats.active_stations}</div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Активные потоки</div>
-                </div>
-                <div className="p-3 rounded-xl glass-card">
-                  <div className="text-lg font-black text-indigo-400">
-                    {stats.stream_availability_percentage}%
-                  </div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Доступность (ТЭП 1)</div>
-                </div>
-                <div className="p-3 rounded-xl glass-card">
-                  <div className="text-lg font-black text-amber-400">{stats.active_sessions}</div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Сессий онлайн</div>
-                </div>
+              <div className="meter">
+                <dt>В эфире</dt>
+                <dd className="num">{stats.active_stations}</dd>
               </div>
-            )}
-          </div>
-
-          <div className="pt-4 border-t border-slate-800">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-1.5">
-              <PlusCircle className="w-4 h-4 text-indigo-400" />
-              <span>Добавить радиостанцию</span>
-            </h3>
-
-            <form onSubmit={handleCreateStation} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="sm:col-span-2">
-                <label className="text-[11px] font-semibold text-slate-400 mb-1 block">Название станции *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Radio Paradise"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
+              <div className="meter">
+                <dt>Пользователей</dt>
+                <dd className="num">{stats.total_users}</dd>
               </div>
-
-              <div className="sm:col-span-2">
-                <label className="text-[11px] font-semibold text-slate-400 mb-1 block">URL потока (HTTPS) *</label>
-                <input
-                  type="url"
-                  required
-                  placeholder="https://stream.example.com/audio.mp3"
-                  value={streamUrl}
-                  onChange={(e) => setStreamUrl(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
+              <div className="meter">
+                <dt>Сессий</dt>
+                <dd className="num">{stats.active_sessions}</dd>
               </div>
+            </dl>
 
-              <div>
-                <label className="text-[11px] font-semibold text-slate-400 mb-1 block">Страна *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="France"
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold text-slate-400 mb-1 block">Язык вещания</label>
-                <input
-                  type="text"
-                  placeholder="french"
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold text-slate-400 mb-1 block">Широта (Latitude)</label>
-                <input
-                  type="number"
-                  step="any"
-                  placeholder="48.8566"
-                  value={latitude}
-                  onChange={(e) => setLatitude(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold text-slate-400 mb-1 block">Долгота (Longitude)</label>
-                <input
-                  type="number"
-                  step="any"
-                  placeholder="2.3522"
-                  value={longitude}
-                  onChange={(e) => setLongitude(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="text-[11px] font-semibold text-slate-400 mb-1 block">Теги/Жанры (через запятую)</label>
-                <input
-                  type="text"
-                  placeholder="jazz, chillout, eclectic"
-                  value={tags}
-                  onChange={(e) => setTags(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="sm:col-span-2 mt-2">
-                <button
-                  type="submit"
-                  disabled={addLoading}
-                  className="btn-primary !w-full justify-center !py-2.5 text-xs"
-                >
-                  {addLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />}
-                  <span>Добавить станцию в систему</span>
+            <div className="availability">
+              <div className="availability-head">
+                <span>
+                  Доступность потоков <span className="num">{stats.stream_availability_percentage}%</span>
+                </span>
+                <button className="link-btn" onClick={checkStreams} disabled={checking}>
+                  {checking ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Проверить потоки'}
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
+              <div className="availability-track">
+                <div
+                  className="availability-fill"
+                  style={{ width: `${Math.min(100, stats.stream_availability_percentage)}%` }}
+                />
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="sheet-sub" style={{ marginTop: 18 }}>
+            <Loader2 className="w-4 h-4 animate-spin" />
+          </p>
+        )}
+
+        {feedback && (
+          <p className={`message${feedback.tone === 'error' ? ' is-error' : ''}`} role="status" style={{ marginTop: 16 }}>
+            {feedback.text}
+          </p>
+        )}
+
+        <section className="sheet-section">
+          <h3 className="sheet-section-title">Новая станция</h3>
+          <form className="form-grid" onSubmit={createStation}>
+            <label className="field is-wide">
+              <span className="field-label">Название</span>
+              <input className="input" required maxLength={255} {...field('name')} />
+            </label>
+            <label className="field is-wide">
+              <span className="field-label">Адрес потока</span>
+              <input className="input" type="url" required placeholder="https://" {...field('streamUrl')} />
+            </label>
+            <label className="field">
+              <span className="field-label">Страна</span>
+              <input className="input" required maxLength={100} {...field('country')} />
+            </label>
+            <label className="field">
+              <span className="field-label">Язык</span>
+              <input className="input" list="admin-languages" maxLength={100} {...field('language')} />
+              <datalist id="admin-languages">
+                {KNOWN_LANGUAGES.map((code) => (
+                  <option key={code} value={code}>
+                    {languageLabel(code)}
+                  </option>
+                ))}
+              </datalist>
+            </label>
+            <label className="field">
+              <span className="field-label">Широта</span>
+              <input className="input num" type="number" step="any" min={-90} max={90} {...field('latitude')} />
+            </label>
+            <label className="field">
+              <span className="field-label">Долгота</span>
+              <input className="input num" type="number" step="any" min={-180} max={180} {...field('longitude')} />
+            </label>
+            <label className="field is-wide">
+              <span className="field-label">Жанры через запятую</span>
+              <input className="input" placeholder="jazz, chillout" {...field('tags')} />
+            </label>
+            <div className="actions is-wide">
+              <button type="submit" className="btn-primary" disabled={saving}>
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Добавить станцию'}
+              </button>
+            </div>
+          </form>
+        </section>
       </div>
     </div>
   );

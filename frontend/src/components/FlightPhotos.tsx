@@ -57,7 +57,9 @@ let audioCtx: AudioContext | null = null;
 
 const playShutter = () => {
   try {
-    const AC = window.AudioContext || (window as any).webkitAudioContext;
+    const AC =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
     audioCtx = audioCtx ?? new AC();
     const ctx = audioCtx;
@@ -103,6 +105,7 @@ const playShutter = () => {
     thump.start(now);
     thump.stop(now + 0.12);
   } catch {
+    audioCtx = null;
   }
 };
 

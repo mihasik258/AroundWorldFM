@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { apiRequest } from '../api/client';
 import { RadioStation } from '../types';
 import { useAuth } from './AuthContext';
+import { launchParams } from '../services/launchParams';
 
 const ROTATION_SECONDS = 300;
 
@@ -12,6 +13,7 @@ interface PlayerContextType {
   error: string | null;
   volume: number;
   playStation: (station: RadioStation) => void;
+  playStationById: (id: number) => Promise<void>;
   togglePlay: () => void;
   playRandom: (genres?: string, languages?: string) => Promise<void>;
   setVolume: (vol: number) => void;
@@ -81,18 +83,20 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       const saved = localStorage.getItem('aroundfm_volume');
       if (saved) return Number(saved);
-    } catch {}
+    } catch {
+      return 0.45;
+    }
     return 0.45;
   });
   const [favorites, setFavorites] = useState<RadioStation[]>([]);
 
   const [currentVibe, setCurrentVibeState] = useState<string>(() => {
+    if (launchParams.vibe) return launchParams.vibe;
     try {
-      const params = new URLSearchParams(window.location.search);
-      const urlVibe = params.get('vibe');
-      if (urlVibe) return urlVibe;
-    } catch {}
-    return localStorage.getItem('aroundfm_vibe') || 'focus';
+      return localStorage.getItem('aroundfm_vibe') || 'focus';
+    } catch {
+      return 'focus';
+    }
   });
 
   const [excludedLanguages, setExcludedLanguagesState] = useState<string[]>(() => {
@@ -142,14 +146,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     audioA.volume = volumeRef.current;
     audioB.volume = 0;
 
-    let stallTimeoutA: any = null;
-    let stallTimeoutB: any = null;
+    let stallTimeoutA: ReturnType<typeof setTimeout> | null = null;
+    let stallTimeoutB: ReturnType<typeof setTimeout> | null = null;
 
     const setupStallWatchdog = (
       audio: HTMLAudioElement,
       slot: 'A' | 'B',
-      getTimeout: () => any,
-      setTimeoutVal: (t: any) => void
+      getTimeout: () => ReturnType<typeof setTimeout> | null,
+      setTimeoutVal: (t: ReturnType<typeof setTimeout> | null) => void
     ) => {
       audio.addEventListener('waiting', () => {
         if (activeSlotRef.current !== slot) return;
@@ -192,7 +196,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, []);
 
-  const fetchFavorites = async () => {
+  const fetchFavorites = useCallback(async () => {
     if (!isAuthenticated) {
       setFavorites([]);
       return;
@@ -203,11 +207,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch (e) {
       console.error('Failed to load favorites', e);
     }
-  };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     fetchFavorites();
-  }, [isAuthenticated]);
+  }, [fetchFavorites]);
 
   const playStation = useCallback((station: RadioStation) => {
     const audioA = audioARef.current;
@@ -318,6 +322,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   }, []);
 
+  const pickRequestRef = useRef(0);
+
+  const playStationById = useCallback(
+    async (id: number) => {
+      const request = ++pickRequestRef.current;
+      try {
+        const station = await apiRequest<RadioStation>(`/stations/${id}`);
+        if (request === pickRequestRef.current) playStation(station);
+      } catch (err) {
+        if (request === pickRequestRef.current) {
+          setError((err instanceof Error && err.message) || 'Станция недоступна');
+        }
+      }
+    },
+    [playStation],
+  );
+
   const skipNext = useCallback(async (vibeOverride?: string) => {
     if (isSkippingRef.current) return;
     isSkippingRef.current = true;
@@ -338,9 +359,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       const station = await apiRequest<RadioStation>(`/stations/vibe/next?${params.toString()}`);
       playStation(station);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to load station', err);
-      setError(err.message || 'Нет станций');
+      setError((err instanceof Error && err.message) || 'Нет станций');
       setIsLoading(false);
     } finally {
       isSkippingRef.current = false;
@@ -355,20 +376,25 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     skipNext(vibe);
   };
 
+  const excludedRef = useRef(excludedLanguages);
+
   const setExcludedLanguages = (langs: string[]) => {
+    excludedRef.current = langs;
     setExcludedLanguagesState(langs);
-    localStorage.setItem('aroundfm_excluded_languages', JSON.stringify(langs));
-    if (currentStation?.language && langs.map((l) => l.toLowerCase()).includes(currentStation.language.toLowerCase())) {
+    try {
+      localStorage.setItem('aroundfm_excluded_languages', JSON.stringify(langs));
+    } catch (err) {
+      console.warn('Excluded languages are not persisted', err);
+    }
+    if (currentStation?.language && langs.includes(currentStation.language.toLowerCase())) {
       skipNext();
     }
   };
 
   const toggleLanguageExclusion = (lang: string) => {
     const clean = lang.toLowerCase();
-    const updated = excludedLanguages.includes(clean)
-      ? excludedLanguages.filter((l) => l !== clean)
-      : [...excludedLanguages, clean];
-    setExcludedLanguages(updated);
+    const current = excludedRef.current;
+    setExcludedLanguages(current.includes(clean) ? current.filter((l) => l !== clean) : [...current, clean]);
   };
 
   useEffect(() => {
@@ -435,8 +461,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const qs = params.toString() ? `?${params.toString()}` : '';
       const station = await apiRequest<RadioStation>(`/stations/random${qs}`);
       playStation(station);
-    } catch (err: any) {
-      setError(err.message || 'Нет станций');
+    } catch (err) {
+      setError((err instanceof Error && err.message) || 'Нет станций');
       setIsLoading(false);
     }
   };
@@ -485,6 +511,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         error,
         volume,
         playStation,
+        playStationById,
         togglePlay,
         playRandom,
         setVolume,

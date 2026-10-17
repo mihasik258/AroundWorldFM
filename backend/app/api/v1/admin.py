@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_role
 from app.core.cache import catalog_cache
+from app.core.jobs import LOCK_STREAM_CHECK, run_exclusive, session_job
 from app.models.session import UserSession
 from app.models.station import Station, StationStream, StreamHealth
 from app.models.user import User, UserRole
@@ -23,6 +25,8 @@ async def _reload_station_with_streams(db: AsyncSession, station_id: int) -> Sta
     )
     return (await db.execute(stmt)).scalar_one()
 
+
+_stream_check_task: asyncio.Task | None = None
 
 router = APIRouter(
     prefix="/admin",
@@ -108,9 +112,7 @@ async def create_station(
     return RadioService._station_to_read(station)
 
 
-@router.patch(
-    "/stations/{station_id}", response_model=StationRead, summary="Обновить станцию"
-)
+@router.patch("/stations/{station_id}", response_model=StationRead, summary="Обновить станцию")
 async def update_station(
     station_id: int,
     station_in: StationUpdate,
@@ -121,6 +123,9 @@ async def update_station(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Станция не найдена")
 
     update_data = station_in.model_dump(exclude_unset=True)
+    for required in ("name", "country", "stream_url"):
+        if required in update_data and update_data[required] is None:
+            raise HTTPException(status_code=422, detail=f"{required}: обязательное поле")
     new_stream_url = update_data.pop("stream_url", None)
 
     for field, value in update_data.items():
@@ -158,7 +163,16 @@ async def delete_station(station_id: int, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "message": "Станция удалена"}
 
 
-@router.post("/trigger-stream-check", summary="Проверить потоки")
-async def trigger_stream_check(db: AsyncSession = Depends(get_db)):
-    await run_stream_health_check(db)
-    return {"status": "ok", "message": "Проверка завершена"}
+@router.post(
+    "/trigger-stream-check",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Проверить потоки",
+)
+async def trigger_stream_check():
+    global _stream_check_task
+    if _stream_check_task is not None and not _stream_check_task.done():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Проверка уже идёт")
+    _stream_check_task = asyncio.create_task(
+        run_exclusive(LOCK_STREAM_CHECK, session_job(run_stream_health_check))
+    )
+    return {"status": "accepted", "message": "Проверка запущена"}

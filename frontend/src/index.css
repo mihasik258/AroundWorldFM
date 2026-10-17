@@ -11,8 +11,8 @@
   --line-strong: rgba(232, 227, 216, 0.22);
 
   --bone: #e8e3d8;
-  --ash: #8b8a85;
-  --dim: #5d6068;
+  --ash: #a3a29c;
+  --dim: #7d8089;
 
   --lamp: #ffb347;
   --lamp-soft: rgba(255, 179, 71, 0.13);
@@ -122,6 +122,8 @@ select {
   display: flex;
   align-items: center;
   gap: 9px;
+  white-space: nowrap;
+  flex: none;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.16em;
@@ -210,29 +212,45 @@ select {
 
 .needle svg {
   overflow: visible;
-  opacity: 0.45;
-  transition: opacity 0.3s ease;
+  opacity: 0;
+  transform: scale(0.3);
+  transition: opacity 0.45s ease, transform 0.45s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
 .needle.is-tuning svg {
   opacity: 1;
+  transform: scale(1);
+  transition-duration: 0.25s;
 }
 
-.needle-line {
-  stroke: var(--bone);
-  stroke-width: 1;
-  opacity: 0.35;
+.needle.is-locking svg {
+  opacity: 1;
+  transform: scale(0.18);
+  transition-duration: 0.55s;
 }
 
-.needle-bracket {
-  stroke: var(--bone);
-  stroke-width: 1;
+.needle-ring {
   fill: none;
-  transition: stroke 0.3s ease;
+  stroke: var(--bone);
+  stroke-width: 1;
+  stroke-opacity: 0.55;
+  vector-effect: non-scaling-stroke;
+  transition: stroke 0.3s ease, stroke-opacity 0.3s ease;
 }
 
-.needle.is-tuning .needle-bracket {
+.needle-core {
+  fill: var(--bone);
+  fill-opacity: 0.8;
+  transition: fill 0.3s ease;
+}
+
+.needle.is-locking .needle-ring {
   stroke: var(--lamp);
+  stroke-opacity: 1;
+}
+
+.needle.is-locking .needle-core {
+  fill: var(--lamp);
 }
 
 .bands {
@@ -468,6 +486,8 @@ select {
   border-color: var(--bone);
 }
 
+
+
 .transport {
   display: flex;
   align-items: center;
@@ -528,6 +548,22 @@ select {
   gap: 10px;
   width: 130px;
   flex: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .volume {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .rail-clock {
+    display: none;
+  }
+
+  .rail {
+    gap: 8px;
+  }
 }
 
 .vol {

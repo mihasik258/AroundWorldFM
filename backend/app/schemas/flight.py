@@ -59,29 +59,6 @@ class FlightRouteRead(FlightRouteBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class UserFlightSessionCreate(BaseModel):
-    route_id: int
-    progress_percent: float = 0.0
-    playback_speed: float = 1.0
-    is_paused: bool = False
-    session_token: str | None = None
-
-
-class UserFlightSessionRead(BaseModel):
-    id: int
-    user_id: int | None = None
-    session_token: str | None = None
-    route_id: int
-    progress_percent: float
-    playback_speed: float
-    is_paused: bool
-    started_at: datetime
-    last_active_at: datetime
-    route: FlightRouteRead
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class FlightTuningResponse(BaseModel):
     route_id: int
     progress_percent: float

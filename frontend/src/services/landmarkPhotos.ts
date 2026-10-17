@@ -7,6 +7,19 @@ const BATCH = 45;
 
 type Entry = string | null;
 
+interface WikiPage {
+  title: string;
+  thumbnail?: { source?: string };
+}
+
+interface WikiResponse {
+  query?: {
+    normalized?: { from: string; to: string }[];
+    redirects?: { from: string; to: string }[];
+    pages?: WikiPage[];
+  };
+}
+
 const cache = new Map<string, Entry>();
 const pending = new Set<string>();
 const listeners = new Set<() => void>();
@@ -20,6 +33,7 @@ try {
     });
   }
 } catch {
+  cache.clear();
 }
 
 const persist = () => {
@@ -30,6 +44,7 @@ const persist = () => {
     });
     localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
   } catch {
+    return;
   }
 };
 
@@ -56,13 +71,13 @@ const fetchBatch = async (titles: string[]) => {
 
   const res = await fetch(`${API}?${params.toString()}`);
   if (!res.ok) throw new Error(`wiki ${res.status}`);
-  const data = await res.json();
+  const data = (await res.json()) as WikiResponse;
 
   const alias = new Map<string, string>();
-  (data.query?.normalized ?? []).forEach((n: any) => alias.set(n.from, n.to));
-  (data.query?.redirects ?? []).forEach((n: any) => alias.set(n.from, n.to));
-  const pages = new Map<string, any>();
-  (data.query?.pages ?? []).forEach((p: any) => pages.set(p.title, p));
+  (data.query?.normalized ?? []).forEach((n) => alias.set(n.from, n.to));
+  (data.query?.redirects ?? []).forEach((n) => alias.set(n.from, n.to));
+  const pages = new Map<string, WikiPage>();
+  (data.query?.pages ?? []).forEach((p) => pages.set(p.title, p));
 
   titles.forEach((title) => {
     let t = title.replace(/_/g, ' ');

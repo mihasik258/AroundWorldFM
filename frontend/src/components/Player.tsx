@@ -3,6 +3,8 @@ import { usePlayer } from '../context/PlayerContext';
 import { useAuth } from '../context/AuthContext';
 import { useFlight } from '../context/FlightContext';
 import { apiRequest } from '../api/client';
+import { NowPlaying } from '../types';
+import { languageLabel } from '../utils/languages';
 import {
   Play,
   Pause,
@@ -41,13 +43,7 @@ export const Player: React.FC<PlayerProps> = ({ onOpenAuth }) => {
 
   const [weather, setWeather] = useState<{ temp: number; condition: string } | null>(null);
 
-  const [nowPlaying, setNowPlaying] = useState<{
-    has_track: boolean;
-    raw_title: string | null;
-    artist: string | null;
-    title: string | null;
-    spotify_url: string | null;
-  } | null>(null);
+  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
 
   const localTimeInfo = useMemo(() => {
     if (!currentStation || currentStation.longitude == null) return null;
@@ -109,8 +105,8 @@ export const Player: React.FC<PlayerProps> = ({ onOpenAuth }) => {
 
     let isMounted = true;
     const fetchNowPlaying = () => {
-      apiRequest<any>(`/stations/${currentStation.id}/now-playing`)
-        .then((data: any) => {
+      apiRequest<NowPlaying>(`/stations/${currentStation.id}/now-playing`)
+        .then((data) => {
           if (isMounted) setNowPlaying(data);
         })
         .catch(() => {});
@@ -202,7 +198,7 @@ export const Player: React.FC<PlayerProps> = ({ onOpenAuth }) => {
       <div className="meta">
         <span className="meta-item">{currentStation.country}</span>
 
-        {coords && (
+        {coords && currentStation.location_precision !== 'country' && (
           <>
             <span className="meta-rule hidden sm:block" />
             <span className="meta-item num hidden sm:inline-flex">{coords}</span>
@@ -232,7 +228,7 @@ export const Player: React.FC<PlayerProps> = ({ onOpenAuth }) => {
         {currentStation.language && (
           <>
             <span className="meta-rule" />
-            <span className="meta-item">{currentStation.language}</span>
+            <span className="meta-item">{languageLabel(currentStation.language)}</span>
           </>
         )}
       </div>

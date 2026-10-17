@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -6,11 +6,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-UTC = timezone.utc
+UTC = UTC
 
 
 class Airport(Base):
-
     __tablename__ = "airports"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -33,7 +32,6 @@ class Airport(Base):
 
 
 class FlightRoute(Base):
-
     __tablename__ = "flight_routes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -65,37 +63,9 @@ class FlightRoute(Base):
         nullable=False,
     )
 
-    origin: Mapped["Airport"] = relationship("Airport", foreign_keys=[origin_airport_id], lazy="joined")
-    destination: Mapped["Airport"] = relationship("Airport", foreign_keys=[destination_airport_id], lazy="joined")
-
-
-class UserFlightSession(Base):
-
-    __tablename__ = "user_flight_sessions"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    origin: Mapped["Airport"] = relationship(
+        "Airport", foreign_keys=[origin_airport_id], lazy="joined"
     )
-    session_token: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
-    route_id: Mapped[int] = mapped_column(
-        ForeignKey("flight_routes.id", ondelete="CASCADE"), nullable=False, index=True
+    destination: Mapped["Airport"] = relationship(
+        "Airport", foreign_keys=[destination_airport_id], lazy="joined"
     )
-
-    progress_percent: Mapped[float] = mapped_column(Float, default=0.0)
-    playback_speed: Mapped[float] = mapped_column(Float, default=1.0)
-    is_paused: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
-        nullable=False,
-    )
-    last_active_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
-        nullable=False,
-    )
-
-    route: Mapped["FlightRoute"] = relationship("FlightRoute", lazy="joined")

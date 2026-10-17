@@ -1,0 +1,146 @@
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://aroundfm:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/aroundfm
+  SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+  SECRET_PEPPER: ${SECRET_PEPPER:?SECRET_PEPPER is required}
+  ENVIRONMENT: production
+  PUBLIC_URL: https://${DOMAIN:?DOMAIN is required}
+  CORS_ORIGINS: https://${DOMAIN}
+  COOKIE_SECURE: "true"
+  SEED_DEMO_USERS: "false"
+  LOG_JSON: "true"
+  WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+  BOT_API_SECRET: ${BOT_API_SECRET:-}
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  db:
+    image: postgres:16.10-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aroundfm
+      POSTGRES_USER: aroundfm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aroundfm -d aroundfm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  migrate:
+    image: aroundfm-backend:${APP_VERSION:-latest}
+    build:
+      context: ./backend
+      target: runtime
+    command: ["sh", "-c", "alembic upgrade head && python -m app.cli seed"]
+    environment: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    logging: *logging
+
+  backend:
+    image: aroundfm-backend:${APP_VERSION:-latest}
+    restart: unless-stopped
+    environment: *backend-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  frontend:
+    image: aroundfm-frontend:${APP_VERSION:-latest}
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  bot:
+    image: aroundfm-bot:${APP_VERSION:-latest}
+    build:
+      context: ./bot
+      target: runtime
+    restart: unless-stopped
+    profiles: ["bot"]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      PUBLIC_URL: https://${DOMAIN}
+      BACKEND_URL: http://backend:8000
+      BOT_API_SECRET: ${BOT_API_SECRET:-}
+      LOG_LEVEL: INFO
+    depends_on:
+      - backend
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  backup:
+    image: postgres:16.10-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: aroundfm
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: aroundfm
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backups:/backups
+      - ./deploy/backup.sh:/usr/local/bin/backup.sh:ro
+    entrypoint: ["sh", "/usr/local/bin/backup.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *logging
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

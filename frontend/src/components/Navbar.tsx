@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { usePlayer } from '../context/PlayerContext';
-import { Shield, Smartphone, LogOut, User as UserIcon, Languages, Plane } from 'lucide-react';
+import { Shield, UserRound, LogOut, User as UserIcon, Languages, Plane } from 'lucide-react';
 import { useFlight } from '../context/FlightContext';
 
 interface NavbarProps {
   onOpenAuth: () => void;
-  onOpenSessions: () => void;
+  onOpenAccount: () => void;
   onOpenAdmin: () => void;
   onOpenLanguages: () => void;
 }
@@ -24,7 +24,7 @@ const useUtcClock = () => {
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
-  onOpenSessions,
+  onOpenAccount,
   onOpenAdmin,
   onOpenLanguages,
 }) => {
@@ -83,8 +83,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            <button className="ghost" onClick={onOpenSessions} title="Активные сессии">
-              <Smartphone className="w-4 h-4" />
+            <button className="ghost" onClick={onOpenAccount} title={`Аккаунт — ${user.username}`}>
+              <UserRound className="w-4 h-4" />
             </button>
 
             <button className="ghost" onClick={logout} title={`Выйти — ${user.username}`}>

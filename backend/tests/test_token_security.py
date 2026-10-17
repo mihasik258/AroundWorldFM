@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -21,7 +21,8 @@ async def test_refresh_rotates_token(client: AsyncClient, create_users):
     res = await refresh(client, t1)
     assert res.status_code == 200
     t2 = refresh_cookie(res)
-    assert t2 and t2 != t1
+    assert t2
+    assert t2 != t1
 
     me = await client.get(f"{API}/users/me", headers=bearer(res))
     assert me.status_code == 200
@@ -44,9 +45,7 @@ async def test_concurrent_refresh_within_grace_is_not_theft(client: AsyncClient,
 
 
 @pytest.mark.asyncio
-async def test_refresh_token_reuse_revokes_session(
-    client: AsyncClient, create_users, monkeypatch
-):
+async def test_refresh_token_reuse_revokes_session(client: AsyncClient, create_users, monkeypatch):
     monkeypatch.setattr(settings, "REFRESH_REUSE_GRACE_SECONDS", 0)
     login_res = await login(client)
     t1 = refresh_cookie(login_res)
@@ -135,7 +134,7 @@ async def test_access_token_must_match_its_session(client: AsyncClient, create_u
         admin_login.json()["access_token"], settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
     )["sid"]
     user_id = create_users["user"].id
-    exp = datetime.now(timezone.utc) + timedelta(minutes=5)
+    exp = datetime.now(UTC) + timedelta(minutes=5)
 
     def forge(extra: dict) -> dict:
         payload = {"sub": str(user_id), "type": "access", "exp": exp, **extra}
