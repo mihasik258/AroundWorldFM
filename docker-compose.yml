@@ -1,12 +1,24 @@
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgrespassword}@db:5432/aroundfm
+  SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+  SECRET_PEPPER: ${SECRET_PEPPER:?SECRET_PEPPER is required}
+  ENVIRONMENT: ${ENVIRONMENT:-development}
+  PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000}
+  SEED_DEMO_USERS: ${SEED_DEMO_USERS:-true}
+  LOG_JSON: ${LOG_JSON:-false}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+  BOT_API_SECRET: ${BOT_API_SECRET:-}
+
 services:
   db:
-    image: postgres:16-alpine
-    container_name: aroundfm_db
+    image: postgres:16.10-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: aroundfm
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -15,26 +27,27 @@ services:
       test: ["CMD-SHELL", "pg_isready -U postgres -d aroundfm"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  backend:
+  migrate:
     image: aroundfm-backend:latest
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
     build:
       context: ./backend
-      dockerfile: Dockerfile
-    container_name: aroundfm_backend
-    restart: unless-stopped
-    volumes:
-      - ./backend:/app
+      target: runtime
+    command: ["sh", "-c", "alembic upgrade head && python -m app.cli seed"]
+    environment: *backend-env
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      DATABASE_URL: "postgresql+asyncpg://postgres:postgrespassword@db:5432/aroundfm"
-      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
-      SECRET_PEPPER: ${SECRET_PEPPER:?SECRET_PEPPER is required}
-      CORS_ORIGINS: '["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"]'
+    restart: "no"
+
+  backend:
+    image: aroundfm-backend:latest
+    restart: unless-stopped
+    environment: *backend-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:8000:8000"
 
@@ -42,16 +55,26 @@ services:
     image: aroundfm-frontend:latest
     build:
       context: ./frontend
-      dockerfile: Dockerfile
-    container_name: aroundfm_frontend
     restart: unless-stopped
-    volumes:
-      - ./frontend/dist:/usr/share/nginx/html:ro
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
     ports:
-      - "3000:80"
+      - "3000:8080"
+
+  bot:
+    image: aroundfm-bot:latest
+    build:
+      context: ./bot
+      target: runtime
+    restart: unless-stopped
+    profiles: ["bot"]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      BACKEND_URL: http://backend:8000
+      BOT_API_SECRET: ${BOT_API_SECRET:-}
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:

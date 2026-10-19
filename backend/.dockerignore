@@ -1,7 +1,11 @@
 .venv
-__pycache__
-*.pyc
+**/__pycache__
+**/*.pyc
 .pytest_cache
 .ruff_cache
-.env
+.mypy_cache
+.coverage
+htmlcov
 tests
+.env
+.env.*
