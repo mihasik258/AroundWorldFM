@@ -1,45 +1,61 @@
 [project]
 name = "aroundfm-backend"
-version = "0.1.0"
-description = "AroundFM modern radio API with security compliance and stream health checks"
-readme = "README.md"
-requires-python = ">=3.12"
-dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.30.0",
-    "pydantic>=2.8.0",
-    "pydantic-settings>=2.4.0",
-    "email-validator>=2.2.0",
-    "sqlalchemy[asyncio]>=2.0.32",
-    "asyncpg>=0.29.0",
-    "bcrypt>=4.2.0",
-    "pyjwt[crypto]>=2.9.0",
-    "slowapi>=0.1.9",
-    "httpx>=0.27.0",
-    "python-multipart>=0.0.9",
-    "aiogram>=3.13.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.3.0",
-    "pytest-asyncio>=0.24.0",
-    "ruff>=0.6.0",
-]
+version = "2.1.0"
+description = "AroundFM radio API"
+requires-python = ">=3.12,<3.13"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
-exclude = [".venv"]
+target-version = "py312"
+extend-exclude = [".venv"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
-ignore = ["E501", "E712", "UP042", "UP017"]
+select = ["E", "W", "F", "I", "UP", "B", "S", "SIM", "ASYNC", "RUF", "C4", "PIE", "PT", "T20", "DTZ", "LOG"]
+ignore = ["E501", "E712", "B008", "S101", "S311", "RUF001", "RUF002", "RUF003", "RUF012", "PT011"]
 
 [tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S104", "S105", "S106", "S107", "S108", "DTZ"]
 "tests/conftest.py" = ["E402"]
+"app/models/identity.py" = ["S105"]
+"app/schemas/auth.py" = ["S105"]
+"app/services/auth_service.py" = ["S106"]
+"app/cli.py" = ["T201"]
+"migrations/env.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+packages = ["app"]
+strict_optional = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = false
+no_implicit_optional = true
+disallow_incomplete_defs = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["app.api.*", "app.main"]
+disallow_incomplete_defs = false
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 pythonpath = ["."]
+filterwarnings = ["error::sqlalchemy.exc.SAWarning"]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+concurrency = ["greenlet", "thread"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+skip_covered = true
