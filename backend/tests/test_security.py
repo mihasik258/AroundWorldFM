@@ -1,3 +1,7 @@
+import subprocess
+import sys
+from pathlib import Path
+
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
@@ -6,6 +10,8 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
 def test_password_hashing_with_individual_salt():
@@ -42,3 +48,17 @@ def test_jwt_access_and_refresh_tokens():
     assert refresh_payload["sub"] == "42"
     assert refresh_payload["jti"] == "test-jti-uuid"
     assert refresh_payload["type"] == "refresh"
+
+
+def test_async_hashing_without_web_app_imports():
+    # CLI imports only app.core.security; anyio.to_thread must not rely on FastAPI loading it
+    code = (
+        "import asyncio\n"
+        "from app.core.security import hash_password_async, verify_password_async\n"
+        "h = asyncio.run(hash_password_async('CliPassword123!'))\n"
+        "assert asyncio.run(verify_password_async('CliPassword123!', h))\n"
+    )
+    result = subprocess.run(  # noqa: S603 - fixed argv, no shell
+        [sys.executable, "-c", code], cwd=BACKEND_DIR, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
